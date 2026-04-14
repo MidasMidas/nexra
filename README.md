@@ -8,6 +8,7 @@ Nexra is a separated full-stack MVP for AI skill search, rating, and recommendat
 - [frontend](C:\Workspace\nexra\frontend): standalone HTML, CSS, and JS console
 - [product-spec.md](C:\Workspace\nexra\docs\product-spec.md): product and platform spec
 - [usage-guide.md](C:\Workspace\nexra\docs\usage-guide.md): run and usage guide
+- [cloud-deployment.md](C:\Workspace\nexra\docs\cloud-deployment.md): Ubuntu cloud deployment guide
 
 ## Current Focus
 
@@ -61,6 +62,8 @@ Frontend URL:
 - [Stop-Nexra.ps1](C:\Workspace\nexra\Stop-Nexra.ps1)
 - [start-nexra.bat](C:\Workspace\nexra\start-nexra.bat)
 - [stop-nexra.bat](C:\Workspace\nexra\stop-nexra.bat)
+- [Configure-NexraDatabase.ps1](C:\Workspace\nexra\Configure-NexraDatabase.ps1)
+- [deploy-cloud.sh](C:\Workspace\nexra\deploy-cloud.sh)
 
 ## Main API Endpoints
 

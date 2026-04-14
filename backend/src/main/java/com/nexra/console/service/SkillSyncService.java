@@ -5,6 +5,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nexra.console.dto.SkillSyncStatusResponse;
 import com.nexra.console.model.Skill;
 import jakarta.annotation.PostConstruct;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -28,6 +30,7 @@ import java.util.Map;
 
 @Service
 public class SkillSyncService {
+    private static final Logger log = LoggerFactory.getLogger(SkillSyncService.class);
     private static final String GLAMA_BASE = "https://glama.ai/mcp/servers";
     private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ISO_LOCAL_DATE_TIME;
     private static final List<String> QUERY_TERMS = List.of(
@@ -77,13 +80,17 @@ public class SkillSyncService {
     @PostConstruct
     void initializeStatus() {
         updateImportedCount();
+        log.info("Skill sync status initialized. importedSkillCount={}, enabled={}, targetCount={}",
+                lastImportedCount, enabled, targetCount);
     }
 
     @Scheduled(initialDelayString = "${nexra.skill-sync.initial-delay-ms:900000}", fixedDelayString = "${nexra.skill-sync.fixed-delay-ms:43200000}")
     public void scheduledSync() {
         if (!enabled) {
+            log.info("Scheduled skill sync skipped because sync is disabled.");
             return;
         }
+        log.info("Scheduled skill sync triggered.");
         syncNow();
     }
 
@@ -91,14 +98,17 @@ public class SkillSyncService {
         lastAttemptAt = now();
         if (!enabled) {
             updateImportedCount();
+            log.info("Manual skill sync skipped because sync is disabled.");
             return status();
         }
         if (inProgress) {
+            log.info("Skill sync request ignored because a sync is already in progress.");
             return status();
         }
 
         inProgress = true;
         lastError = null;
+        log.info("Skill sync started. targetCount={}, dataFile={}", targetCount, dataFile);
 
         try {
             List<Skill> importedSkills = collectSkills();
@@ -107,8 +117,10 @@ public class SkillSyncService {
             lastImportedCount = importedSkills.size();
             lastSuccessAt = now();
             updateImportedCount();
+            log.info("Skill sync completed successfully. importedCount={}, lastSuccessAt={}", lastImportedCount, lastSuccessAt);
         } catch (Exception exception) {
             lastError = exception.getMessage();
+            log.error("Skill sync failed. message={}", lastError, exception);
         } finally {
             inProgress = false;
         }

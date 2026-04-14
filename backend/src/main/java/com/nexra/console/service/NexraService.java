@@ -29,6 +29,8 @@ import com.nexra.console.repository.UserAccountRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PostConstruct;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -49,6 +51,7 @@ import java.util.stream.Collectors;
 
 @Service
 public class NexraService {
+    private static final Logger log = LoggerFactory.getLogger(NexraService.class);
     private final ObjectMapper objectMapper;
     private final Path dataFile;
     private final SkillRepository skillRepository;
@@ -81,6 +84,7 @@ public class NexraService {
                     new UserAccount("user_1", "alice@nexra.local", "alice123", "Alice Builder", "USER"),
                     new UserAccount("user_2", "bob@nexra.local", "bob123", "Bob Operator", "USER")
             ));
+            log.info("Seeded default user accounts.");
         }
 
         if (skillRepository.count() == 0) {
@@ -97,6 +101,7 @@ public class NexraService {
                     "Alice Builder",
                     "Proprietary",
                     "Cloud / API"));
+            log.info("Seeded initial skill catalog with imported skills and default pending skill.");
         }
 
         if (transactions.isEmpty()) {
@@ -128,6 +133,7 @@ public class NexraService {
             skillRepository.deleteAllById(importedIds);
         }
         skillRepository.saveAll(importedSkills);
+        log.info("Replaced imported skill catalog. removed={}, added={}", importedIds.size(), importedSkills.size());
     }
 
     public synchronized int importedSkillCount() {
@@ -297,6 +303,18 @@ public class NexraService {
         int toIndex = Math.min(fromIndex + safePageSize, filtered.size());
         int totalPages = filtered.isEmpty() ? 0 : (int) Math.ceil((double) filtered.size() / safePageSize);
 
+        log.info(
+                "Skill search executed. query='{}', function='{}', readiness='{}', hideTemplates={}, includePending={}, page={}, pageSize={}, totalItems={}",
+                safeText(query),
+                safeText(functionName),
+                safeText(readiness),
+                hideTemplates,
+                includePending,
+                safePage,
+                safePageSize,
+                filtered.size()
+        );
+
         return new PaginatedResponse<>(
                 filtered.subList(fromIndex, toIndex),
                 safePage,
@@ -334,6 +352,8 @@ public class NexraService {
         reviewRepository.save(review);
         skill.applyUserRating(request.getRating());
         skillRepository.save(skill);
+        log.info("Review submitted. skillId={}, userId={}, rating={}, newUserRatingAvg={}, newUserRatingCount={}",
+                skillId, user.id(), request.getRating(), skill.getUserRatingAvg(), skill.getUserRatingCount());
         return toReviewResponse(review);
     }
 
@@ -364,6 +384,8 @@ public class NexraService {
                 defaultText(request.getOperatingSystem(), "Cloud / API")
         );
         skillRepository.save(skill);
+        log.info("Skill submitted. skillId={}, submittedBy={}, category={}, approvalStatus={}",
+                skill.getId(), user.id(), skill.getCategory(), skill.getApprovalStatus());
         return toSkillResponse(skill, "", "");
     }
 
@@ -415,6 +437,7 @@ public class NexraService {
         Skill skill = findSkill(skillId);
         skill.setApprovalStatus("APPROVED");
         skillRepository.save(skill);
+        log.info("Skill approved. skillId={}, adminUserId={}", skillId, adminUserId);
         return toSkillResponse(skill, "", "");
     }
 
@@ -444,6 +467,8 @@ public class NexraService {
                 defaultText(request.getOperatingSystem(), skill.getOperatingSystem())
         );
         skillRepository.save(skill);
+        log.info("Skill updated by admin. skillId={}, adminUserId={}, approvalStatus={}, status={}",
+                skillId, adminUserId, skill.getApprovalStatus(), skill.getStatus());
         return toSkillResponse(skill, "", "");
     }
 
@@ -452,16 +477,23 @@ public class NexraService {
         requireAdmin(adminUserId);
         reviewRepository.deleteBySkillId(skillId);
         skillRepository.deleteById(skillId);
+        log.warn("Skill deleted by admin. skillId={}, adminUserId={}", skillId, adminUserId);
     }
 
     public LoginResponse login(LoginRequest request) {
-        UserAccount user = userAccountRepository.findByEmailIgnoreCase(request.getEmail().trim())
-                .orElseThrow(() -> new UnauthorizedException("Invalid email or password."));
+        String normalizedEmail = request.getEmail().trim().toLowerCase();
+        UserAccount user = userAccountRepository.findByEmailIgnoreCase(normalizedEmail)
+                .orElseThrow(() -> {
+                    log.warn("Login failed due to unknown email. email={}", normalizedEmail);
+                    return new UnauthorizedException("Invalid email or password.");
+                });
         if (!user.password().equals(request.getPassword())) {
+            log.warn("Login failed due to invalid password. email={}", normalizedEmail);
             throw new UnauthorizedException("Invalid email or password.");
         }
         String token = "nexra_" + UUID.randomUUID().toString().replace("-", "");
         sessions.put(token, user.id());
+        log.info("User logged in. userId={}, email={}, role={}", user.id(), user.email(), user.role());
         return new LoginResponse(token, new UserResponse(user.id(), user.name(), user.email(), user.role()));
     }
 
@@ -469,6 +501,7 @@ public class NexraService {
     public LoginResponse register(RegisterRequest request) {
         String normalizedEmail = request.getEmail().trim().toLowerCase();
         if (userAccountRepository.existsByEmailIgnoreCase(normalizedEmail)) {
+            log.warn("Registration rejected for duplicate email. email={}", normalizedEmail);
             throw new BadRequestException("This email is already registered.");
         }
         UserAccount user = userAccountRepository.save(new UserAccount(
@@ -481,13 +514,15 @@ public class NexraService {
 
         String token = "nexra_" + UUID.randomUUID().toString().replace("-", "");
         sessions.put(token, user.id());
+        log.info("User registered. userId={}, email={}", user.id(), user.email());
         return new LoginResponse(token, new UserResponse(user.id(), user.name(), user.email(), user.role()));
     }
 
     public void logout(String authorization) {
         String token = extractBearerToken(authorization);
         if (token != null) {
-            sessions.remove(token);
+            String userId = sessions.remove(token);
+            log.info("User logged out. userId={}", safeText(userId));
         }
     }
 
@@ -525,6 +560,7 @@ public class NexraService {
                 "active"
         );
         apiKeys.add(0, created);
+        log.info("API key created. name={}, scope={}, keyId={}", created.getName(), created.getScope(), created.getId());
         return created;
     }
 

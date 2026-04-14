@@ -1,5 +1,11 @@
-﻿const API_BASE = "http://localhost:8080/api";
-
+const isLocalFrontend =
+  typeof window !== "undefined" &&
+  (window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost") &&
+  window.location.port === "4173";
+const API_BASE =
+  (typeof window !== "undefined" && window.__NEXRA_API_BASE__) ||
+  (isLocalFrontend ? "http://localhost:8080/api" : `${window.location.origin}/api`);
+const API_ORIGIN_DISPLAY = API_BASE.replace(/\/api$/, "");
 const copy = {
   en: {
     nav: { welcome: "Welcome", tutorial: "Tutorial", dashboard: "Dashboard", marketplace: "Marketplace", skill: "Skill Detail", profile: "Profile", admin: "Admin" },
@@ -166,11 +172,11 @@ const copy = {
     adminDeleted: "Skill deleted.",
     adminNeedRole: "Switch to an admin user to manage reviews.",
     errorsTitle: "Common errors",
-    error1: "Backend not running: start Nexra and confirm http://localhost:8080/api/dashboard returns data.",
+    error1: "Backend not running: start Nexra and confirm {apiBase}/api/dashboard returns data.",
     error2: "Skill not found: your agent requested an invalid skill id.",
     error3: "Validation error: review payload must include author and a rating from 1 to 5.",
     error4: "Connection refused: your agent cannot reach the local Nexra API endpoint.",
-    connected: "Frontend connected to Spring Boot API at http://localhost:8080/api.",
+    connected: "Frontend connected to Spring Boot API at {apiBase}/api.",
     failed: "Unable to reach backend: {error}. Start the Spring Boot app first."
   },
   zh: {
@@ -338,11 +344,11 @@ const copy = {
     adminDeleted: "Skill \u5df2\u5220\u9664\u3002",
     adminNeedRole: "\u8bf7\u5207\u6362\u5230\u7ba1\u7406\u5458\u8d26\u53f7\u540e\u518d\u8fdb\u884c\u5ba1\u6838\u7ba1\u7406\u3002",
     errorsTitle: "\u5e38\u89c1\u9519\u8bef",
-    error1: "\u540e\u7aef\u672a\u542f\u52a8\uff1a\u5148\u542f\u52a8 Nexra\uff0c\u5e76\u786e\u8ba4 http://localhost:8080/api/dashboard \u80fd\u8fd4\u56de\u6570\u636e\u3002",
+    error1: "\u540e\u7aef\u672a\u542f\u52a8\uff1a\u5148\u542f\u52a8 Nexra\uff0c\u5e76\u786e\u8ba4 {apiBase}/api/dashboard \u80fd\u8fd4\u56de\u6570\u636e\u3002",
     error2: "\u6280\u80fd\u4e0d\u5b58\u5728\uff1a\u4f60\u7684 agent \u8bf7\u6c42\u4e86\u65e0\u6548\u7684 skill id\u3002",
     error3: "\u53c2\u6570\u6821\u9a8c\u5931\u8d25\uff1a\u63d0\u4ea4\u8bc4\u4ef7\u65f6\u5fc5\u987b\u5e26 author\uff0crating \u5fc5\u987b\u5728 1 \u5230 5 \u4e4b\u95f4\u3002",
     error4: "\u8fde\u63a5\u88ab\u62d2\u7edd\uff1a\u4f60\u7684 agent \u65e0\u6cd5\u8bbf\u95ee\u672c\u5730 Nexra API \u5730\u5740\u3002",
-    connected: "\u524d\u7aef\u5df2\u8fde\u63a5\u5230 Spring Boot API\uff1ahttp://localhost:8080/api \u3002",
+    connected: "\u524d\u7aef\u5df2\u8fde\u63a5\u5230 Spring Boot API\uff1a{apiBase}/api \u3002",
     failed: "\u65e0\u6cd5\u8fde\u63a5\u540e\u7aef\uff1a{error}\u3002\u8bf7\u5148\u542f\u52a8 Spring Boot \u670d\u52a1\u3002"
   }
 };
@@ -457,7 +463,7 @@ function deriveReadiness(skill) {
       code: "template",
       label: tr().readinessTemplate,
       reason: state.language === "zh"
-        ? "更像开发模板，不像普通用户可直接接入的现成 skill。"
+        ? "这更像一个模板或脚手架项目，不是普通用户第一次就能直接使用的现成 skill。"
         : "This looks more like a starter template than a ready-made skill for ordinary users."
     };
   }
@@ -467,7 +473,7 @@ function deriveReadiness(skill) {
       code: "local",
       label: tr().readinessLocal,
       reason: state.language === "zh"
-        ? "继续使用前通常需要先安装本地运行环境或接入本地工具。"
+        ? "这个 skill 往往需要本地运行环境、安装步骤，或者桌面侧配置后才能使用。"
         : "This usually needs a local runtime, installation, or desktop-side setup before use."
     };
   }
@@ -477,7 +483,7 @@ function deriveReadiness(skill) {
       code: "credentials",
       label: tr().readinessCreds,
       reason: state.language === "zh"
-        ? "普通用户能继续用，但通常要先准备外部账号、密钥或业务系统权限。"
+        ? "普通用户可以继续了解它，但通常还需要外部账号、API Key、OAuth，或者系统访问权限。"
         : "A new user can continue, but will usually need external accounts, tokens, or system access first."
     };
   }
@@ -486,7 +492,7 @@ function deriveReadiness(skill) {
     code: "ready",
     label: tr().readinessReady,
     reason: state.language === "zh"
-      ? "描述、来源和调用说明相对完整，普通用户更容易继续尝试。"
+      ? "从说明、来源和调用方式看，这个 skill 对第一次使用的用户也算信息完整，可以继续接入。"
       : "The description, source, and calling guidance look complete enough for a first-time user to continue."
   };
 }
@@ -554,6 +560,10 @@ function setBanner(message, type = "success") {
 function clearBanner() {
   statusBanner.className = "banner";
   statusBanner.textContent = "";
+}
+
+function withApiBase(text) {
+  return String(text ?? "").replaceAll("{apiBase}", API_ORIGIN_DISPLAY);
 }
 
 function showToast(message) {
@@ -785,34 +795,35 @@ function renderTutorial() {
   view.innerHTML = "";
   if (!state.agentGuide) return;
 
+  const host = new URL(API_ORIGIN_DISPLAY).host;
   const headerSnippet = `GET /api/skills?q=image&function=ocr&page=0&pageSize=5 HTTP/1.1
-Host: localhost:8080
+Host: ${host}
 Content-Type: application/json
 X-Nexra-Agent: my-agent`;
 
-  const curlSnippet = `curl "http://localhost:8080/api/skills?q=image&function=ocr&page=0&pageSize=5"
+  const curlSnippet = `curl "${API_BASE}?q=image&function=ocr&page=0&pageSize=5"
 
-curl http://localhost:8080/api/skills/skill-123
+curl ${API_BASE}/skill-123
 
 # Then let your own agent call the provider using the returned docs URL`;
 
   const pythonSnippet = `import requests
 
 skills = requests.get(
-    "http://localhost:8080/api/skills",
+    "${API_BASE}",
     params={"q": "image", "function": "ocr", "page": 0, "pageSize": 5}
 ).json()["items"]
 best_skill = skills[0]
-detail = requests.get(f"http://localhost:8080/api/skills/{best_skill['id']}").json()
+detail = requests.get(f"{API_BASE}/{best_skill['id']}").json()
 
 print(detail["skill"]["apiDocsUrl"])
 print(detail["skill"]["callExample"])`;
 
-  const jsSnippet = `const results = await fetch("http://localhost:8080/api/skills?q=image&function=ocr&page=0&pageSize=5")
+  const jsSnippet = `const results = await fetch("${API_BASE}?q=image&function=ocr&page=0&pageSize=5")
   .then((res) => res.json());
 
 const bestSkill = results.items[0];
-const detail = await fetch(\`http://localhost:8080/api/skills/\${bestSkill.id}\`)
+const detail = await fetch(\`${API_BASE}/\${bestSkill.id}\`)
   .then((res) => res.json());
 
 console.log(detail.skill.apiDocsUrl);
@@ -888,7 +899,7 @@ ${state.agentGuide.exampleCall.payload}</pre>
     <article class="panel">
       <div class="section-title"><h3>${tr().errorsTitle}</h3><span class="pill">Troubleshooting</span></div>
       <div class="tutorial-list">
-        <div class="doc-card">${tr().error1}</div>
+        <div class="doc-card">${withApiBase(tr().error1)}</div>
         <div class="doc-card">${tr().error2}</div>
         <div class="doc-card">${tr().error3}</div>
         <div class="doc-card">${tr().error4}</div>
@@ -1017,7 +1028,7 @@ function renderMarketplace() {
   const pager = document.createElement("div");
   pager.className = "pagination-row";
   pager.innerHTML = `
-    <span class="helper-text">${tr().marketplacePage}: ${state.skillsPage.page + 1} / ${Math.max(state.skillsPage.totalPages, 1)} · ${tr().marketplaceTotal}: ${state.skillsPage.totalItems} · ${state.language === "zh" ? "\u5f53\u524d\u9875" : "This page"}: ${visibleSkills.length}</span>
+    <span class="helper-text">${tr().marketplacePage}: ${state.skillsPage.page + 1} / ${Math.max(state.skillsPage.totalPages, 1)} 闂?${tr().marketplaceTotal}: ${state.skillsPage.totalItems} 闂?${state.language === "zh" ? "\u5f53\u524d\u9875" : "This page"}: ${visibleSkills.length}</span>
     <div class="admin-actions">
       <button id="market-prev-btn" class="secondary-btn" type="button" ${state.skillsPage.page <= 0 ? "disabled" : ""}>${tr().marketplacePrev}</button>
       <button id="market-next-btn" class="secondary-btn" type="button" ${state.skillsPage.page + 1 >= Math.max(state.skillsPage.totalPages, 1) ? "disabled" : ""}>${tr().marketplaceNext}</button>
@@ -1381,7 +1392,7 @@ function renderAdmin() {
       const item = document.createElement("button");
       item.type = "button";
       item.className = `admin-item ${skill.id === state.adminSelectedSkillId ? "active" : ""}`;
-      item.innerHTML = `<strong>${skill.name}</strong><div class="helper-text">${skill.category} · ${tr().adminSubmittedBy}: ${skill.submittedBy}</div><div class="helper-text">${tr().adminApprovalStatus}: ${displayStatus(skill.approvalStatus)}</div><div class="helper-text">${tr().adminFunctions}: ${skill.functions.join(", ")}</div>`;
+      item.innerHTML = `<strong>${skill.name}</strong><div class="helper-text">${skill.category} 闂?${tr().adminSubmittedBy}: ${skill.submittedBy}</div><div class="helper-text">${tr().adminApprovalStatus}: ${displayStatus(skill.approvalStatus)}</div><div class="helper-text">${tr().adminFunctions}: ${skill.functions.join(", ")}</div>`;
       item.addEventListener("click", () => {
         state.adminSelectedSkillId = skill.id;
         renderAdmin();
@@ -1625,10 +1636,10 @@ function initLoginForm() {
       loginForm.reset();
       state.authMode = "login";
       await refreshData(true);
-      setBanner(isRegister ? tr().registerSuccess : tr().loginSuccess, "success");
+      setBanner(withApiBase(isRegister ? tr().registerSuccess : tr().loginSuccess), "success");
     } catch (error) {
       const failureCopy = isRegister ? tr().registerFailed : tr().loginFailed;
-      setBanner(failureCopy.replace("{error}", error.message), "error");
+      setBanner(withApiBase(failureCopy.replace("{error}", error.message)), "error");
       showLoginModal();
     }
   });
@@ -1645,12 +1656,12 @@ async function init() {
     clearBanner();
     await refreshData(true);
     if (currentUser()) {
-      setBanner(tr().connected, "success");
+      setBanner(withApiBase(tr().connected), "success");
     } else {
       showLoginModal();
     }
   } catch (error) {
-    setBanner(tr().failed.replace("{error}", error.message), "error");
+    setBanner(withApiBase(tr().failed.replace("{error}", error.message)), "error");
   }
 }
 
