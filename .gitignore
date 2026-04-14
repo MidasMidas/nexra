@@ -1,5 +1,6 @@
 .runtime/
 logs/
 backend/target/
+backend/data/
 frontend/__pycache__/
 test-output/

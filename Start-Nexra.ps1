@@ -87,7 +87,12 @@ $frontendErrLog = Join-Path $logsDir "frontend-error.log"
 
 Write-Host "Starting Nexra backend..."
 $backendClasses = Join-Path $root "backend\target\classes"
-$backendLibs = Join-Path $root ".runtime\jar-work\BOOT-INF\lib\*"
+$backendDependencyDir = Join-Path $root "backend\target\dependency"
+$backendLibs = if (Test-Path $backendDependencyDir) {
+    Join-Path $backendDependencyDir "*"
+} else {
+    Join-Path $root ".runtime\jar-work\BOOT-INF\lib\*"
+}
 if (-not (Test-Path $backendClasses)) {
     Write-Host "Backend classes not found: $backendClasses"
     exit 1

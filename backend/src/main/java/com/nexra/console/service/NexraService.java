@@ -23,11 +23,15 @@ import com.nexra.console.model.BillingTransaction;
 import com.nexra.console.model.Review;
 import com.nexra.console.model.Skill;
 import com.nexra.console.model.UserAccount;
+import com.nexra.console.repository.ReviewRepository;
+import com.nexra.console.repository.SkillRepository;
+import com.nexra.console.repository.UserAccountRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -47,72 +51,87 @@ import java.util.stream.Collectors;
 public class NexraService {
     private final ObjectMapper objectMapper;
     private final Path dataFile;
-    private final List<Skill> skills = new CopyOnWriteArrayList<>();
-    private final List<Review> reviews = new CopyOnWriteArrayList<>();
+    private final SkillRepository skillRepository;
+    private final ReviewRepository reviewRepository;
+    private final UserAccountRepository userAccountRepository;
     private final List<BillingTransaction> transactions = new CopyOnWriteArrayList<>();
     private final List<ApiKeyRecord> apiKeys = new CopyOnWriteArrayList<>();
-    private final List<UserAccount> users = new CopyOnWriteArrayList<>();
     private final Map<String, String> sessions = new HashMap<>();
 
     public NexraService(
             ObjectMapper objectMapper,
+            SkillRepository skillRepository,
+            ReviewRepository reviewRepository,
+            UserAccountRepository userAccountRepository,
             @Value("${nexra.skills.data-file:backend/src/main/resources/data/skills.json}") String dataFile
     ) {
         this.objectMapper = objectMapper;
+        this.skillRepository = skillRepository;
+        this.reviewRepository = reviewRepository;
+        this.userAccountRepository = userAccountRepository;
         this.dataFile = Path.of(dataFile);
     }
 
     @PostConstruct
+    @Transactional
     void seed() {
-        users.add(new UserAccount("admin_1", "admin@nexra.local", "admin123", "Nexra Admin", "ADMIN"));
-        users.add(new UserAccount("user_1", "alice@nexra.local", "alice123", "Alice Builder", "USER"));
-        users.add(new UserAccount("user_2", "bob@nexra.local", "bob123", "Bob Operator", "USER"));
+        if (userAccountRepository.count() == 0) {
+            userAccountRepository.saveAll(List.of(
+                    new UserAccount("admin_1", "admin@nexra.local", "admin123", "Nexra Admin", "ADMIN"),
+                    new UserAccount("user_1", "alice@nexra.local", "alice123", "Alice Builder", "USER"),
+                    new UserAccount("user_2", "bob@nexra.local", "bob123", "Bob Operator", "USER")
+            ));
+        }
 
-        loadSkillDatabase();
-        skills.add(new Skill("skill-report", "Report Composer", "Productivity",
-                "Drafts structured summaries, release notes, and stakeholder-ready reports from operational events.",
-                0.05, "draft", 90, 480, 79, 0.0, 0, 0,
-                List.of("report generation", "summarization", "release notes"),
-                "REST API with JSON instructions",
-                "user_1",
-                "PENDING",
-                "manual",
-                "https://example.com/report-composer",
-                "Alice Builder",
-                "Proprietary",
-                "Cloud / API"));
+        if (skillRepository.count() == 0) {
+            loadSkillDatabase();
+            skillRepository.save(new Skill("skill-report", "Report Composer", "Productivity",
+                    "Drafts structured summaries, release notes, and stakeholder-ready reports from operational events.",
+                    0.05, "draft", 90, 480, 79, 0.0, 0, 0,
+                    List.of("report generation", "summarization", "release notes"),
+                    "REST API with JSON instructions",
+                    "user_1",
+                    "PENDING",
+                    "manual",
+                    "https://example.com/report-composer",
+                    "Alice Builder",
+                    "Proprietary",
+                    "Cloud / API"));
+        }
 
-        reviews.add(new Review("rev_1", "skill-playwright", null, "Ops Team", 5,
-                "Reliable for multi-step browser tasks and screenshot capture.", "2026-04-09"));
-        reviews.add(new Review("rev_2", "skill-github", null, "Agent Builder", 5,
-                "Excellent for repo context, PRs, and code review workflows.", "2026-04-08"));
-        reviews.add(new Review("rev_3", "skill-notion", null, "Research Ops", 4,
-                "Strong knowledge sync and page updates with manageable cost.", "2026-04-07"));
-        reviews.add(new Review("rev_4", "skill-slack", null, "Product Team", 5,
-                "Very useful for posting updates and summarizing threads.", "2026-04-06"));
+        if (transactions.isEmpty()) {
+            transactions.add(new BillingTransaction("txn_1001", "Invocation charges", -124.32, "2026-04-09 18:10"));
+            transactions.add(new BillingTransaction("txn_1002", "Top-up", 500.00, "2026-04-08 09:30"));
+            transactions.add(new BillingTransaction("txn_1003", "Invocation charges", -87.76, "2026-04-07 20:12"));
+        }
 
-        transactions.add(new BillingTransaction("txn_1001", "Invocation charges", -124.32, "2026-04-09 18:10"));
-        transactions.add(new BillingTransaction("txn_1002", "Top-up", 500.00, "2026-04-08 09:30"));
-        transactions.add(new BillingTransaction("txn_1003", "Invocation charges", -87.76, "2026-04-07 20:12"));
-
-        apiKeys.add(new ApiKeyRecord("nk_live_01", "Production Search Client", "skills:read", "3 min ago", "active"));
-        apiKeys.add(new ApiKeyRecord("nk_test_02", "Staging Agent", "skills:read", "2 hrs ago", "active"));
-        apiKeys.add(new ApiKeyRecord("nk_old_03", "Legacy QA", "skills:read", "12 days ago", "revoked"));
+        if (apiKeys.isEmpty()) {
+            apiKeys.add(new ApiKeyRecord("nk_live_01", "Production Search Client", "skills:read", "3 min ago", "active"));
+            apiKeys.add(new ApiKeyRecord("nk_test_02", "Staging Agent", "skills:read", "2 hrs ago", "active"));
+            apiKeys.add(new ApiKeyRecord("nk_old_03", "Legacy QA", "skills:read", "12 days ago", "revoked"));
+        }
     }
 
+    @Transactional
     private void loadSkillDatabase() {
         replaceImportedSkills(readSkillsFromConfiguredSource());
     }
 
+    @Transactional
     public synchronized void replaceImportedSkills(List<Skill> importedSkills) {
-        skills.removeIf(skill -> "glama-import".equalsIgnoreCase(skill.getSubmittedBy()));
-        skills.addAll(0, importedSkills);
+        List<String> importedIds = skillRepository.findAll().stream()
+                .filter(skill -> "glama-import".equalsIgnoreCase(skill.getSubmittedBy()))
+                .map(Skill::getId)
+                .toList();
+        if (!importedIds.isEmpty()) {
+            importedIds.forEach(reviewRepository::deleteBySkillId);
+            skillRepository.deleteAllById(importedIds);
+        }
+        skillRepository.saveAll(importedSkills);
     }
 
     public synchronized int importedSkillCount() {
-        return (int) skills.stream()
-                .filter(skill -> "glama-import".equalsIgnoreCase(skill.getSubmittedBy()))
-                .count();
+        return Math.toIntExact(skillRepository.countBySubmittedByIgnoreCase("glama-import"));
     }
 
     private List<Skill> readSkillsFromConfiguredSource() {
@@ -167,6 +186,7 @@ public class NexraService {
     }
 
     public DashboardResponse getDashboard() {
+        List<Skill> skills = skillRepository.findAll();
         int approvedSkills = (int) skills.stream()
                 .filter(skill -> !"revoked".equalsIgnoreCase(skill.getStatus()))
                 .filter(skill -> "APPROVED".equalsIgnoreCase(skill.getApprovalStatus()))
@@ -263,7 +283,7 @@ public class NexraService {
         int safePage = Math.max(page, 0);
         int safePageSize = Math.max(Math.min(pageSize, 50), 1);
 
-        List<SkillResponse> filtered = skills.stream()
+        List<SkillResponse> filtered = skillRepository.findAll().stream()
                 .filter(skill -> includePending || "APPROVED".equalsIgnoreCase(skill.getApprovalStatus()))
                 .filter(skill -> matchesQuery(skill, query))
                 .filter(skill -> matchesFunction(skill, functionName))
@@ -288,14 +308,14 @@ public class NexraService {
 
     public SkillDetailResponse getSkill(String id) {
         Skill skill = findSkill(id);
-        List<ReviewResponse> skillReviews = reviews.stream()
-                .filter(review -> review.getSkillId().equals(id))
+        List<ReviewResponse> skillReviews = reviewRepository.findBySkillId(id).stream()
                 .sorted(Comparator.comparing(Review::getTimestamp).reversed())
                 .map(this::toReviewResponse)
                 .toList();
         return new SkillDetailResponse(toSkillResponse(skill, "", ""), skillReviews);
     }
 
+    @Transactional
     public ReviewResponse addReview(String skillId, String userId, ReviewRequest request) {
         Skill skill = findSkill(skillId);
         UserAccount user = requireAuthenticatedUser(userId);
@@ -311,11 +331,13 @@ public class NexraService {
                 comment,
                 LocalDate.now().toString()
         );
-        reviews.add(0, review);
+        reviewRepository.save(review);
         skill.applyUserRating(request.getRating());
+        skillRepository.save(skill);
         return toReviewResponse(review);
     }
 
+    @Transactional
     public SkillResponse submitSkill(String userId, SkillCreateRequest request) {
         UserAccount user = requireAuthenticatedUser(userId);
         Skill skill = new Skill(
@@ -341,30 +363,32 @@ public class NexraService {
                 defaultText(request.getLicense(), "Unknown"),
                 defaultText(request.getOperatingSystem(), "Cloud / API")
         );
-        skills.add(skill);
+        skillRepository.save(skill);
         return toSkillResponse(skill, "", "");
     }
 
     public List<UserResponse> getUsers() {
-        return users.stream()
+        return userAccountRepository.findAll().stream()
                 .map(user -> new UserResponse(user.id(), user.name(), user.email(), user.role()))
                 .toList();
     }
 
     public UserProfileResponse getUserProfile(String userId) {
         UserAccount user = requireAuthenticatedUser(userId);
-        List<SkillResponse> submittedSkills = skills.stream()
+        List<Skill> allSkills = skillRepository.findAll();
+        List<SkillResponse> submittedSkills = allSkills.stream()
                 .filter(skill -> user.id().equals(skill.getSubmittedBy()))
                 .sorted(Comparator.comparingInt((Skill skill) -> recommendationScore(skill, "", "")).reversed())
                 .map(skill -> toSkillResponse(skill, "", ""))
                 .toList();
-        List<UserReviewResponse> submittedReviews = reviews.stream()
-                .filter(review -> user.id().equals(review.getUserId()) || user.name().equalsIgnoreCase(review.getAuthor()))
+        Map<String, Skill> skillMap = allSkills.stream()
+                .collect(Collectors.toMap(Skill::getId, skill -> skill, (left, right) -> left));
+        List<UserReviewResponse> submittedReviews = reviewRepository.findByUserId(user.id()).stream()
                 .sorted(Comparator.comparing(Review::getTimestamp).reversed())
                 .map(review -> new UserReviewResponse(
                         review.getId(),
                         review.getSkillId(),
-                        findSkill(review.getSkillId()).getName(),
+                        skillMap.containsKey(review.getSkillId()) ? skillMap.get(review.getSkillId()).getName() : review.getSkillId(),
                         review.getRating(),
                         review.getComment(),
                         review.getTimestamp()
@@ -379,19 +403,22 @@ public class NexraService {
 
     public List<SkillResponse> getPendingSkills(String adminUserId) {
         requireAdmin(adminUserId);
-        return skills.stream()
+        return skillRepository.findAll().stream()
                 .filter(skill -> "PENDING".equalsIgnoreCase(skill.getApprovalStatus()))
                 .map(skill -> toSkillResponse(skill, "", ""))
                 .toList();
     }
 
+    @Transactional
     public SkillResponse approveSkill(String adminUserId, String skillId) {
         requireAdmin(adminUserId);
         Skill skill = findSkill(skillId);
         skill.setApprovalStatus("APPROVED");
+        skillRepository.save(skill);
         return toSkillResponse(skill, "", "");
     }
 
+    @Transactional
     public SkillResponse adminUpdateSkill(String adminUserId, String skillId, SkillUpdateRequest request) {
         requireAdmin(adminUserId);
         Skill skill = findSkill(skillId);
@@ -416,20 +443,19 @@ public class NexraService {
                 defaultText(request.getLicense(), skill.getLicense()),
                 defaultText(request.getOperatingSystem(), skill.getOperatingSystem())
         );
+        skillRepository.save(skill);
         return toSkillResponse(skill, "", "");
     }
 
+    @Transactional
     public void adminDeleteSkill(String adminUserId, String skillId) {
         requireAdmin(adminUserId);
-        Skill skill = findSkill(skillId);
-        skills.remove(skill);
-        reviews.removeIf(review -> review.getSkillId().equals(skillId));
+        reviewRepository.deleteBySkillId(skillId);
+        skillRepository.deleteById(skillId);
     }
 
     public LoginResponse login(LoginRequest request) {
-        UserAccount user = users.stream()
-                .filter(candidate -> candidate.email().equalsIgnoreCase(request.getEmail().trim()))
-                .findFirst()
+        UserAccount user = userAccountRepository.findByEmailIgnoreCase(request.getEmail().trim())
                 .orElseThrow(() -> new UnauthorizedException("Invalid email or password."));
         if (!user.password().equals(request.getPassword())) {
             throw new UnauthorizedException("Invalid email or password.");
@@ -439,19 +465,19 @@ public class NexraService {
         return new LoginResponse(token, new UserResponse(user.id(), user.name(), user.email(), user.role()));
     }
 
+    @Transactional
     public LoginResponse register(RegisterRequest request) {
         String normalizedEmail = request.getEmail().trim().toLowerCase();
-        if (users.stream().anyMatch(user -> user.email().equalsIgnoreCase(normalizedEmail))) {
+        if (userAccountRepository.existsByEmailIgnoreCase(normalizedEmail)) {
             throw new BadRequestException("This email is already registered.");
         }
-        UserAccount user = new UserAccount(
+        UserAccount user = userAccountRepository.save(new UserAccount(
                 "user_" + UUID.randomUUID().toString().replace("-", "").substring(0, 8),
                 normalizedEmail,
                 request.getPassword(),
                 request.getName().trim(),
                 "USER"
-        );
-        users.add(user);
+        ));
 
         String token = "nexra_" + UUID.randomUUID().toString().replace("-", "");
         sessions.put(token, user.id());
@@ -503,16 +529,12 @@ public class NexraService {
     }
 
     private Skill findSkill(String id) {
-        return skills.stream()
-                .filter(skill -> skill.getId().equals(id))
-                .findFirst()
+        return skillRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Skill not found: " + id));
     }
 
     private UserAccount findUser(String userId) {
-        return users.stream()
-                .filter(user -> user.id().equals(userId))
-                .findFirst()
+        return userAccountRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("User not found: " + userId));
     }
 
