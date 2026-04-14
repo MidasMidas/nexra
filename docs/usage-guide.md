@@ -18,7 +18,7 @@ Nexra 是一个面向 AI Agent 的 skill 搜索、评分与推荐平台。当前
 
 ## 2. 目录结构
 
-- [backend](C:\Workspace\nexra\backend)：Spring Boot 后端
+- [backend_py](C:\Workspace\nexra\backend_py)：Python 后端
 - [frontend](C:\Workspace\nexra\frontend)：前端控制台
 - [Start-Nexra.ps1](C:\Workspace\nexra\Start-Nexra.ps1)：启动脚本
 - [Stop-Nexra.ps1](C:\Workspace\nexra\Stop-Nexra.ps1)：停止脚本
@@ -27,21 +27,11 @@ Nexra 是一个面向 AI Agent 的 skill 搜索、评分与推荐平台。当前
 
 ## 3. 环境要求
 
-- Java 17+
-- Maven 3.9+
 - Python 3.9+
 
 ## 4. 启动方式
 
-首次使用前，建议先打包一次后端：
-
-```powershell
-cd .\backend
-mvn package
-cd ..
-```
-
-之后可以直接用一键脚本：
+可以直接用一键脚本：
 
 ```powershell
 .\Start-Nexra.ps1
@@ -65,15 +55,27 @@ cd ..
 
 ## 5. 身份与角色
 
-当前是轻量级身份管理，使用请求头 `X-User-Id` 标识用户。
+当前使用邮箱注册和 token 登录。
+
+公开认证接口：
+
+- `POST /api/auth/register`
+- `POST /api/auth/login`
+- `POST /api/auth/logout`
 
 内置示例用户：
 
-- `admin_1`：管理员
-- `user_1`：普通用户
-- `user_2`：普通用户
+- `admin@nexra.local`：管理员
+- `alice@nexra.local`：普通用户
+- `bob@nexra.local`：普通用户
 
-可通过接口查看：
+登录后，前端会自动携带：
+
+- `Authorization: Bearer <token>`
+
+除公开接口外，所有需要用户身份的接口都要求 token 校验。
+
+可查看用户列表的接口：
 
 - `GET /api/users`
 
@@ -142,7 +144,7 @@ GET /api/skills?function=report&page=0&pageSize=5
 
 请求头：
 
-- `X-User-Id: user_1`
+- `Authorization: Bearer <token>`
 
 请求示例：
 
@@ -167,7 +169,7 @@ GET /api/skills?function=report&page=0&pageSize=5
 
 管理员请求头：
 
-- `X-User-Id: admin_1`
+- `Authorization: Bearer <admin-token>`
 
 主要接口：
 
@@ -185,15 +187,16 @@ GET /api/skills?function=report&page=0&pageSize=5
 
 ## 9. Skill 定时同步
 
-系统内置了 skill 自动同步任务，会按固定周期从公开 MCP 目录拉取新的 skill 数据，并写回本地 skill 数据文件。
+系统内置了 skill 自动同步任务，会按固定周期重新加载本地 skill 种子文件，并刷新当前导入的 skill 数据。
 
 默认配置：
 
-- 是否开启：`nexra.skill-sync.enabled=true`
-- 目标数量：`nexra.skill-sync.target-count=3000`
-- 首次延迟：`nexra.skill-sync.initial-delay-ms=900000`
-- 固定周期：`nexra.skill-sync.fixed-delay-ms=43200000`
-- 数据文件：`nexra.skills.data-file=backend/src/main/resources/data/skills.json`
+- 是否开启：`skillSync.enabled=true`
+- 目标数量：`skillSync.targetCount=3000`
+- 首次延迟：`skillSync.initialDelaySeconds=900`
+- 固定周期：`skillSync.intervalSeconds=43200`
+- 种子文件：`skillDataFile=backend/src/main/resources/data/skills.json`
+- 运行态状态文件：`databasePath=backend_py/data/nexra-state.json`
 
 管理员接口：
 
@@ -202,12 +205,12 @@ GET /api/skills?function=report&page=0&pageSize=5
 
 请求头：
 
-- `X-User-Id: admin_1`
+- `Authorization: Bearer <admin-token>`
 
 用途说明：
 
 - `GET /status`：查看当前同步状态、最近一次执行时间、最近一次成功时间、当前已导入数量
-- `POST /sync`：立即手动触发一次 skill 拉取和本地数据刷新
+- `POST /sync`：立即手动触发一次 skill 重载和本地数据刷新
 
 ## 10. 评分系统说明
 
@@ -246,3 +249,13 @@ systemScore = 0.5 * success_rate + 0.3 * latency_score + 0.2 * cost_score
 - [.runtime/nexra-services.json](C:\Workspace\nexra\.runtime\nexra-services.json)
 
 如果服务无法正常启动，优先看日志。
+
+## 13. 数据存储
+
+当前 Python 后端使用 JSON 状态文件持久化运行数据：
+
+- [backend_py/data/nexra-state.json](C:\Workspace\nexra\backend_py\data\nexra-state.json)
+
+初始导入 skill 数据来自：
+
+- [backend/src/main/resources/data/skills.json](C:\Workspace\nexra\backend\src\main\resources\data\skills.json)

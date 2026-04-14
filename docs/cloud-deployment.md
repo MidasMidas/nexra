@@ -3,17 +3,17 @@
 This guide deploys Nexra to an Ubuntu cloud server with:
 
 - `nginx` serving the frontend
-- `systemd` managing the Spring Boot backend
-- `H2` file database stored on the server
+- `systemd` managing the Python backend
+- a local JSON state file stored on the server
 - optional HTTPS via `certbot`
 
-## What Database Is Used
+## What Storage Is Used
 
-The current deployment uses `H2` file storage.
+The current deployment uses a local JSON state file.
 
-- Database file: `/opt/nexra/data/nexra-db.mv.db`
+- State file: `/opt/nexra/data/nexra-state.json`
 - Imported skill source file: `/opt/nexra/data/skills.json`
-- Runtime Spring config: `/opt/nexra/config/application-cloud.properties`
+- Runtime backend config: `/opt/nexra/backend_py/config.json`
 
 ## Server Requirements
 
@@ -76,9 +76,8 @@ sudo bash ./deploy-cloud.sh
 
 The script:
 
-- installs `OpenJDK 17`, `Maven`, `nginx`, `curl`, and `rsync`
-- compiles the backend
-- copies backend runtime files into `/opt/nexra`
+- installs `python3`, `nginx`, `curl`, and `rsync`
+- copies the Python backend into `/opt/nexra/backend_py`
 - copies frontend static files into `/var/www/nexra`
 - writes `/etc/systemd/system/nexra-backend.service`
 - writes `/etc/nginx/sites-available/nexra`
@@ -154,9 +153,9 @@ sudo DOMAIN=nexra.example.com bash ./deploy-cloud.sh
 ## 9. Important Paths
 
 - source repo on server: `/opt/nexra-src`
-- deployed backend runtime: `/opt/nexra/backend`
-- deployed backend config: `/opt/nexra/config/application-cloud.properties`
-- deployed backend database: `/opt/nexra/data/nexra-db.mv.db`
+- deployed backend runtime: `/opt/nexra/backend_py`
+- deployed backend config: `/opt/nexra/backend_py/config.json`
+- deployed backend state file: `/opt/nexra/data/nexra-state.json`
 - deployed frontend files: `/var/www/nexra`
 - backend systemd unit: `/etc/systemd/system/nexra-backend.service`
 - nginx site config: `/etc/nginx/sites-available/nexra`
@@ -165,4 +164,4 @@ sudo DOMAIN=nexra.example.com bash ./deploy-cloud.sh
 
 - The frontend now uses the current domain's `/api` path automatically in cloud deployment.
 - You do not need a separate frontend service on the server because `nginx` serves the static files directly.
-- The backend still runs as a standalone Java process managed by `systemd`.
+- The backend runs as a standalone Python process managed by `systemd`.

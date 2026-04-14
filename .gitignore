@@ -2,5 +2,7 @@
 logs/
 backend/target/
 backend/data/
+backend_py/data/
+backend_py/__pycache__/
 frontend/__pycache__/
 test-output/

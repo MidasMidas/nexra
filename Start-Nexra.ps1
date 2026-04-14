@@ -86,19 +86,12 @@ $frontendLog = Join-Path $logsDir "frontend.log"
 $frontendErrLog = Join-Path $logsDir "frontend-error.log"
 
 Write-Host "Starting Nexra backend..."
-$backendClasses = Join-Path $root "backend\target\classes"
-$backendDependencyDir = Join-Path $root "backend\target\dependency"
-$backendLibs = if (Test-Path $backendDependencyDir) {
-    Join-Path $backendDependencyDir "*"
-} else {
-    Join-Path $root ".runtime\jar-work\BOOT-INF\lib\*"
-}
-if (-not (Test-Path $backendClasses)) {
-    Write-Host "Backend classes not found: $backendClasses"
+$backendScript = Join-Path $root "backend_py\server.py"
+if (-not (Test-Path $backendScript)) {
+    Write-Host "Backend Python entrypoint not found: $backendScript"
     exit 1
 }
-$backendClasspath = "$backendClasses;$backendLibs"
-$backendCommand = "/c `"java -cp `"$backendClasspath`" com.nexra.console.NexraConsoleApplication 1>>`"$backendLog`" 2>>`"$backendErrLog`"`""
+$backendCommand = "/c `"python `"$backendScript`" 1>>`"$backendLog`" 2>>`"$backendErrLog`"`""
 $backend = Start-BackgroundProcess `
     -FilePath "cmd.exe" `
     -Arguments $backendCommand `

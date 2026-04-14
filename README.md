@@ -4,7 +4,7 @@ Nexra is a separated full-stack MVP for AI skill search, rating, and recommendat
 
 ## Structure
 
-- [backend](C:\Workspace\nexra\backend): Spring Boot REST API
+- [backend_py](C:\Workspace\nexra\backend_py): Python REST API
 - [frontend](C:\Workspace\nexra\frontend): standalone HTML, CSS, and JS console
 - [product-spec.md](C:\Workspace\nexra\docs\product-spec.md): product and platform spec
 - [usage-guide.md](C:\Workspace\nexra\docs\usage-guide.md): run and usage guide
@@ -23,22 +23,13 @@ Key capabilities now include:
 - User identity model with normal users and admins
 - User-submitted skills with admin approval flow
 - Admin update/delete of skill ratings and detailed metadata
-- Built-in scheduled skill sync that refreshes the local skill library from a public MCP directory
+- Built-in scheduled skill sync that refreshes the local skill library from the local skill seed file
 
 ## Run Backend
 
-Build once before first script-based startup:
-
 ```bash
-cd backend
-mvn package
-```
-
-Then run:
-
-```bash
-cd backend
-mvn spring-boot:run
+cd backend_py
+python server.py
 ```
 
 Backend base URL:
@@ -72,11 +63,15 @@ Public and user-facing:
 - `GET /api`
 - `GET /api/agent-guide`
 - `GET /api/dashboard`
+- `POST /api/auth/register`
+- `POST /api/auth/login`
+- `POST /api/auth/logout`
 - `GET /api/skills?q=&function=&page=&pageSize=`
 - `GET /api/skills/{id}`
 - `POST /api/skills/{id}/reviews`
 - `POST /api/skills/submissions`
 - `GET /api/users`
+- `GET /api/users/me`
 - `GET /api/billing/summary`
 - `GET /api/billing/transactions`
 - `GET /api/keys`
@@ -90,3 +85,20 @@ Admin-only:
 - `DELETE /api/admin/skills/{id}`
 - `GET /api/admin/skills/sync/status`
 - `POST /api/admin/skills/sync`
+
+## Storage
+
+The current Python backend persists runtime state into:
+
+- `backend_py/data/nexra-state.json`
+
+The initial imported skill library still comes from:
+
+- `backend/src/main/resources/data/skills.json`
+
+## Default Accounts
+
+If you have not registered a new account yet, the seeded accounts are:
+
+- User: `alice@nexra.local / alice123`
+- Admin: `admin@nexra.local / admin123`

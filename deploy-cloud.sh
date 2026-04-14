@@ -5,6 +5,7 @@ DOMAIN="${DOMAIN:-_}"
 SOURCE_DIR="${SOURCE_DIR:-$(pwd)}"
 APP_DIR="${APP_DIR:-/opt/nexra}"
 WEB_DIR="${WEB_DIR:-/var/www/nexra}"
+BACKEND_HOST="${BACKEND_HOST:-127.0.0.1}"
 BACKEND_PORT="${BACKEND_PORT:-8080}"
 ENABLE_HTTPS="${ENABLE_HTTPS:-false}"
 CERTBOT_EMAIL="${CERTBOT_EMAIL:-}"
@@ -14,28 +15,23 @@ if [[ "${EUID}" -ne 0 ]]; then
   exit 1
 fi
 
-if [[ ! -f "${SOURCE_DIR}/backend/pom.xml" ]]; then
-  echo "SOURCE_DIR does not look like the Nexra repo: ${SOURCE_DIR}"
+if [[ ! -f "${SOURCE_DIR}/backend_py/server.py" ]]; then
+  echo "SOURCE_DIR does not look like the Python Nexra repo: ${SOURCE_DIR}"
   exit 1
 fi
 
 echo "Installing system packages..."
 apt-get update
-apt-get install -y openjdk-17-jre-headless maven nginx curl rsync
-
-echo "Building backend..."
-pushd "${SOURCE_DIR}/backend" >/dev/null
-mvn -q -DskipTests compile
-mvn -q dependency:copy-dependencies -DincludeScope=runtime -DoutputDirectory=target/dependency
-popd >/dev/null
+apt-get install -y python3 nginx curl rsync
 
 echo "Preparing directories..."
-mkdir -p "${APP_DIR}/backend" "${APP_DIR}/config" "${APP_DIR}/data" "${APP_DIR}/logs" "${WEB_DIR}"
+mkdir -p "${APP_DIR}/backend_py" "${APP_DIR}/data" "${APP_DIR}/logs" "${WEB_DIR}"
 
-echo "Publishing backend runtime..."
-rsync -a --delete "${SOURCE_DIR}/backend/target/classes/" "${APP_DIR}/backend/classes/"
-rsync -a --delete "${SOURCE_DIR}/backend/target/dependency/" "${APP_DIR}/backend/dependency/"
-cp "${SOURCE_DIR}/backend/src/main/resources/data/skills.json" "${APP_DIR}/data/skills.json"
+echo "Publishing Python backend..."
+rsync -a --delete \
+  --exclude "__pycache__" \
+  --exclude "data" \
+  "${SOURCE_DIR}/backend_py/" "${APP_DIR}/backend_py/"
 
 echo "Publishing frontend..."
 rsync -a --delete \
@@ -43,32 +39,32 @@ rsync -a --delete \
   --exclude "server.py" \
   "${SOURCE_DIR}/frontend/" "${WEB_DIR}/"
 
-cat > "${APP_DIR}/config/application-cloud.properties" <<EOF
-server.port=${BACKEND_PORT}
-nexra.skills.data-file=${APP_DIR}/data/skills.json
-spring.datasource.url=jdbc:h2:file:${APP_DIR}/data/nexra-db;DB_CLOSE_ON_EXIT=FALSE;FILE_LOCK=NO
-spring.datasource.driver-class-name=org.h2.Driver
-spring.datasource.username=sa
-spring.datasource.password=
-spring.jpa.hibernate.ddl-auto=update
-spring.jpa.open-in-view=false
-spring.jpa.database-platform=org.hibernate.dialect.H2Dialect
-spring.h2.console.enabled=false
-nexra.skill-sync.enabled=true
-nexra.skill-sync.target-count=3000
-nexra.skill-sync.initial-delay-ms=900000
-nexra.skill-sync.fixed-delay-ms=43200000
+cp "${SOURCE_DIR}/backend/src/main/resources/data/skills.json" "${APP_DIR}/data/skills.json"
+
+cat > "${APP_DIR}/backend_py/config.json" <<EOF
+{
+  "host": "${BACKEND_HOST}",
+  "port": ${BACKEND_PORT},
+  "databasePath": "${APP_DIR}/data/nexra-state.json",
+  "skillDataFile": "${APP_DIR}/data/skills.json",
+  "skillSync": {
+    "enabled": true,
+    "targetCount": 3000,
+    "initialDelaySeconds": 900,
+    "intervalSeconds": 43200
+  }
+}
 EOF
 
 cat > /etc/systemd/system/nexra-backend.service <<EOF
 [Unit]
-Description=Nexra Spring Boot Backend
+Description=Nexra Python Backend
 After=network.target
 
 [Service]
 Type=simple
 WorkingDirectory=${APP_DIR}
-ExecStart=/usr/bin/java -cp ${APP_DIR}/backend/classes:${APP_DIR}/backend/dependency/* com.nexra.console.NexraConsoleApplication --spring.config.additional-location=file:${APP_DIR}/config/application-cloud.properties
+ExecStart=/usr/bin/python3 ${APP_DIR}/backend_py/server.py
 Restart=always
 RestartSec=5
 StandardOutput=append:${APP_DIR}/logs/backend.log
@@ -91,7 +87,7 @@ server {
     }
 
     location /api/ {
-        proxy_pass http://127.0.0.1:${BACKEND_PORT}/api/;
+        proxy_pass http://${BACKEND_HOST}:${BACKEND_PORT}/api/;
         proxy_http_version 1.1;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
@@ -100,7 +96,7 @@ server {
     }
 
     location = /api {
-        proxy_pass http://127.0.0.1:${BACKEND_PORT}/api;
+        proxy_pass http://${BACKEND_HOST}:${BACKEND_PORT}/api;
         proxy_http_version 1.1;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
@@ -130,7 +126,7 @@ fi
 
 echo "Waiting for backend to answer..."
 for _ in {1..20}; do
-  if curl -fsS "http://127.0.0.1:${BACKEND_PORT}/api/dashboard" >/dev/null; then
+  if curl -fsS "http://${BACKEND_HOST}:${BACKEND_PORT}/api/dashboard" >/dev/null; then
     break
   fi
   sleep 2
@@ -140,7 +136,7 @@ echo
 echo "Deployment complete."
 echo "Backend service: systemctl status nexra-backend"
 echo "Nginx service: systemctl status nginx"
-echo "Backend health: http://127.0.0.1:${BACKEND_PORT}/api/dashboard"
+echo "Backend health: http://${BACKEND_HOST}:${BACKEND_PORT}/api/dashboard"
 if [[ "${DOMAIN}" == "_" ]]; then
   echo "Open the server IP in your browser."
 else
