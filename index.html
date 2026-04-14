@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Nexra Console</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="sidebar">
+        <div>
+          <p class="eyebrow">AI Agent Infra</p>
+          <h1>Nexra Console</h1>
+          <p class="muted">Gateway, trust, marketplace, and billing for agent skills.</p>
+        </div>
+        <nav class="nav">
+          <button class="nav-link active" data-view="dashboard">Dashboard</button>
+          <button class="nav-link" data-view="marketplace">Marketplace</button>
+          <button class="nav-link" data-view="skill">Skill Detail</button>
+          <button class="nav-link" data-view="billing">Billing</button>
+          <button class="nav-link" data-view="keys">API Keys</button>
+        </nav>
+      </aside>
+
+      <main class="main">
+        <header class="hero">
+          <div>
+            <p class="eyebrow">MVP Prototype</p>
+            <h2 id="hero-title">Operational trust for AI skills</h2>
+          </div>
+          <div class="hero-badge">
+            <span>Overall platform trust</span>
+            <strong id="platform-trust">0</strong>
+          </div>
+        </header>
+
+        <section id="dashboard-view" class="view active"></section>
+        <section id="marketplace-view" class="view"></section>
+        <section id="skill-view" class="view"></section>
+        <section id="billing-view" class="view"></section>
+        <section id="keys-view" class="view"></section>
+      </main>
+    </div>
+
+    <template id="metric-template">
+      <article class="metric-card">
+        <p class="metric-label"></p>
+        <h3 class="metric-value"></h3>
+        <p class="metric-meta"></p>
+      </article>
+    </template>
+
+    <script src="./app.js"></script>
+  </body>
+</html>

@@ -1,0 +1,89 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Nexra Console</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="sidebar">
+        <div>
+          <p class="eyebrow">AI Skill Discovery</p>
+          <h1>Nexra Console</h1>
+          <p class="muted">Search, rate, and recommend external skills for your agent.</p>
+        </div>
+        <div class="language-switch">
+          <label for="language-select" id="language-label">Language</label>
+          <select id="language-select">
+            <option value="en">English</option>
+            <option value="zh">&#20013;&#25991;</option>
+          </select>
+        </div>
+        <nav class="nav" id="primary-nav"></nav>
+      </aside>
+
+      <main class="main">
+        <header class="hero">
+          <div>
+            <p class="eyebrow">Full Stack MVP</p>
+            <h2 id="hero-title">Search and recommend the right skill</h2>
+          </div>
+          <div class="hero-actions">
+            <div class="hero-badge">
+              <span>Average marketplace trust</span>
+              <strong id="platform-trust">--</strong>
+            </div>
+            <div id="session-controls" class="session-card"></div>
+          </div>
+        </header>
+
+        <section id="status-banner" class="banner"></section>
+        <section id="welcome-view" class="view active"></section>
+        <section id="tutorial-view" class="view"></section>
+        <section id="dashboard-view" class="view"></section>
+        <section id="marketplace-view" class="view"></section>
+        <section id="skill-view" class="view"></section>
+        <section id="profile-view" class="view"></section>
+        <section id="admin-view" class="view"></section>
+        <section id="billing-view" class="view"></section>
+        <section id="keys-view" class="view"></section>
+      </main>
+    </div>
+
+    <div id="login-modal" class="modal-shell hidden">
+      <div class="modal-card">
+        <div class="section-title">
+          <h3 id="login-title">Sign in to Nexra</h3>
+          <span class="pill" id="auth-pill">Login</span>
+        </div>
+        <p id="login-copy" class="helper-text">Sign in with your account to continue.</p>
+        <div class="tab-bar" id="auth-mode-tabs">
+          <button class="tab-btn active" type="button" data-auth-mode="login" id="auth-login-tab">Sign in</button>
+          <button class="tab-btn" type="button" data-auth-mode="register" id="auth-register-tab">Register</button>
+        </div>
+        <form id="login-form" class="review-form">
+          <label for="login-name" id="login-name-label" class="hidden">Full name</label>
+          <input id="login-name" name="name" class="hidden" autocomplete="name" />
+          <label for="login-username" id="login-username-label">Email</label>
+          <input id="login-username" name="username" autocomplete="username" />
+          <label for="login-password" id="login-password-label">Password</label>
+          <input id="login-password" name="password" type="password" autocomplete="current-password" />
+          <button class="primary-btn" id="login-submit" type="submit">Sign in</button>
+        </form>
+      </div>
+    </div>
+
+    <template id="metric-template">
+      <article class="metric-card">
+        <p class="metric-label"></p>
+        <h3 class="metric-value"></h3>
+        <p class="metric-meta"></p>
+      </article>
+    </template>
+
+    <script src="./app.js"></script>
+  </body>
+  </html>
+

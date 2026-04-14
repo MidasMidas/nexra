@@ -1,0 +1,211 @@
+{
+  "source": "Glama MCP Directory",
+  "sourceUrl": "https://glama.ai/mcp/servers",
+  "generatedSkillCount": 3078,
+  "targetSkillCount": 3000,
+  "queriesTried": 71,
+  "topSourceQueries": [
+    [
+      "Python",
+      50
+    ],
+    [
+      "Remote",
+      50
+    ],
+    [
+      "Developer Tools",
+      50
+    ],
+    [
+      "Hybrid",
+      50
+    ],
+    [
+      "File Systems",
+      50
+    ],
+    [
+      "Search",
+      50
+    ],
+    [
+      "App Automation",
+      50
+    ],
+    [
+      "Security",
+      50
+    ],
+    [
+      "Autonomous Agents",
+      50
+    ],
+    [
+      "E-commerce Retail",
+      50
+    ],
+    [
+      "postgres",
+      50
+    ],
+    [
+      "Command Line",
+      49
+    ],
+    [
+      "Code Analysis",
+      49
+    ],
+    [
+      "Local",
+      49
+    ],
+    [
+      "TypeScript",
+      49
+    ],
+    [
+      "Multimedia Processing",
+      49
+    ],
+    [
+      "Cloud Storage",
+      49
+    ],
+    [
+      "Knowledge Memory",
+      49
+    ],
+    [
+      "jira",
+      49
+    ],
+    [
+      "slack",
+      49
+    ],
+    [
+      "notion",
+      49
+    ],
+    [
+      "playwright",
+      49
+    ],
+    [
+      "linear",
+      49
+    ],
+    [
+      "Shell Access",
+      48
+    ],
+    [
+      "Databases",
+      48
+    ],
+    [
+      "Prompts",
+      48
+    ],
+    [
+      "Resources",
+      48
+    ],
+    [
+      "Note Taking",
+      48
+    ],
+    [
+      "Entertainment Media",
+      48
+    ],
+    [
+      "Text Summarization",
+      48
+    ],
+    [
+      "Finance",
+      48
+    ],
+    [
+      "Blockchain",
+      48
+    ],
+    [
+      "discord",
+      48
+    ],
+    [
+      "figma",
+      48
+    ],
+    [
+      "CI CD DevOps",
+      47
+    ],
+    [
+      "Agent Orchestration",
+      47
+    ],
+    [
+      "Marketing",
+      47
+    ],
+    [
+      "github",
+      47
+    ],
+    [
+      "gitlab",
+      47
+    ],
+    [
+      "Official",
+      46
+    ],
+    [
+      "Monitoring",
+      46
+    ],
+    [
+      "mysql",
+      46
+    ],
+    [
+      "Version Control",
+      45
+    ],
+    [
+      "Location Services",
+      45
+    ],
+    [
+      "Health Wellness",
+      45
+    ],
+    [
+      "Customer Support",
+      45
+    ],
+    [
+      "Web Scraping",
+      45
+    ],
+    [
+      "sql",
+      45
+    ],
+    [
+      "Communication",
+      44
+    ],
+    [
+      "Research Data",
+      44
+    ]
+  ],
+  "failedQueries": [],
+  "note": "Names, descriptions, source URLs, authors, and licenses come from the public directory pages. Rating, usage, latency, and billing-style metrics are deterministic synthetic seed values inferred for Nexra demo use because public directories do not provide Nexra-native trust telemetry."
+}

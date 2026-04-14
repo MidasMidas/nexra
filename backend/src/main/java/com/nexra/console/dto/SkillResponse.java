@@ -1,0 +1,38 @@
+package com.nexra.console.dto;
+
+public record SkillResponse(
+        String id,
+        String name,
+        String category,
+        String description,
+        double pricePerCall,
+        String status,
+        int successRate,
+        int latencyP95,
+        int costEfficiency,
+        double userRatingAvg,
+        int userRatingCount,
+        int recentCalls,
+        int agentScore,
+        int systemScore,
+        int normalizedUserRating,
+        int overallTrust,
+        int matchScore,
+        int recommendationScore,
+        String recommendationSummary,
+        java.util.List<String> functions,
+        String invocationMethod,
+        String submittedBy,
+        String approvalStatus,
+        String source,
+        String sourceUrl,
+        String sourceAuthor,
+        String license,
+        String operatingSystem,
+        String providerName,
+        String providerUrl,
+        String apiDocsUrl,
+        String authRequirement,
+        String callExample
+) {
+}
