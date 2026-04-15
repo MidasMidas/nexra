@@ -480,8 +480,12 @@ class NexraService:
         name = safe_text(payload.get("name")).strip()
         email = safe_text(payload.get("email")).strip().lower()
         password = safe_text(payload.get("password"))
-        if not email or len(password) < 6:
-            raise ApiError(400, "Invalid request: registration fields are incomplete.")
+        if not email:
+            raise ApiError(400, "Invalid request: email is required.")
+        if not password:
+            raise ApiError(400, "Invalid request: password is required.")
+        if len(password) < 6:
+            raise ApiError(400, "Invalid request: password must be at least 6 characters.")
         if not name:
             local_part = email.split("@", 1)[0].strip()
             name = local_part or "Nexra User"
