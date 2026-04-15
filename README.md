@@ -4,6 +4,32 @@ Nexra is an open-source full-stack platform for AI skill discovery, scoring, and
 
 Instead of forwarding requests or running third-party skills for agents, Nexra focuses on the first-step problem: helping users and agents find the right skill, compare quality signals, understand how a skill should be called, and decide whether it is trustworthy enough to use.
 
+Current public demo:
+
+- Web: [https://nexra-one.vercel.app](https://nexra-one.vercel.app)
+- API: [https://nexra-one.vercel.app/api/dashboard](https://nexra-one.vercel.app/api/dashboard)
+
+## Why Nexra
+
+The AI tooling ecosystem is getting crowded. There are more skills, MCP servers, wrappers, APIs, and agent plugins than most teams can realistically evaluate by hand.
+
+Nexra turns that chaos into a searchable marketplace with trust signals:
+
+- Find skills by keyword, function, category, invocation style, and readiness
+- Separate user ratings from system-generated agent scores
+- Rank skills by match, trust, popularity, and cost efficiency
+- Show provider guidance, auth requirements, and call examples
+- Let users submit new skills and let admins review them before approval
+
+Nexra does not proxy or execute third-party skills in this phase. It helps agents discover the right skill, then call the provider directly.
+
+## Who this is for
+
+- AI product teams building skill-based agents
+- Agent platform builders who need a marketplace and review workflow
+- Operations teams that want a governed internal skill catalog
+- Developers exploring MCP-style skills and external tool ecosystems
+
 ## What Nexra does
 
 - Searches skills by keyword, function, category, invocation style, and readiness
@@ -18,6 +44,13 @@ Instead of forwarding requests or running third-party skills for agents, Nexra f
 ## Product positioning
 
 Nexra is a skill search and recommendation system.
+
+Example use cases:
+
+- An agent builder wants to find the best summarization or writing skill for a new workflow
+- A team wants users to rate the real usefulness of external skills after trying them
+- An admin wants to review user-submitted skills before they appear in the marketplace
+- A platform wants a trust layer before letting agents adopt third-party capabilities
 
 Current scope:
 
@@ -173,6 +206,41 @@ That seed file is intentionally versioned as public sample content so the market
 - `docs/cloud-deployment.md`
 - `docs/vercel-deployment.md`
 - `docs/product-spec.md`
+
+## Recommended GitHub Description
+
+If you want the repository homepage to look stronger, use this description:
+
+`Open-source AI skill marketplace for discovery, scoring, recommendation, and governance.`
+
+## Recommended GitHub Topics
+
+Use these repository topics on GitHub:
+
+- `ai`
+- `agent`
+- `ai-agents`
+- `marketplace`
+- `mcp`
+- `skill-discovery`
+- `recommendation-system`
+- `python`
+- `vercel`
+- `postgres`
+
+## Contributing
+
+Contributions are welcome.
+
+Good first contribution areas:
+
+- Better ranking strategies for skill recommendation
+- Better admin moderation workflows
+- Additional language support in the frontend
+- Better skill import quality and deduplication
+- Improved onboarding and tutorial UX
+
+See [CONTRIBUTING.md](/C:/Workspace/nexra/CONTRIBUTING.md) for contribution notes.
 
 ## License
 
