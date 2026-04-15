@@ -1665,17 +1665,17 @@ function initLoginForm() {
         method: "POST",
         body: JSON.stringify(payload)
       });
-      signIn(response.token, response.user, false);
+      signIn(response.token, response.user, true);
       loginForm.reset();
       state.authMode = "login";
       const successMessage = isRegister ? tr().registerSuccess : tr().loginSuccess;
-      setAuthFeedback(successMessage, "success");
-      await refreshData(true);
+      clearAuthFeedback();
+      setView("welcome");
+      rerenderViews();
       setBanner(withApiBase(successMessage), "success");
-      window.setTimeout(() => {
-        clearAuthFeedback();
-        hideLoginModal();
-      }, 900);
+      refreshData(false).catch((error) => {
+        setBanner(withApiBase(tr().failed.replace("{error}", error.message)), "error");
+      });
     } catch (error) {
       const failureCopy = isRegister ? tr().registerFailed : tr().loginFailed;
       const failureMessage = failureCopy.replace("{error}", error.message);

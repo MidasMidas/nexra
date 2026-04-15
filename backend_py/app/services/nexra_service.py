@@ -106,6 +106,7 @@ class NexraService:
         self.conn.row_factory = sqlite3.Row
         self._init_db()
         self._load_snapshot_or_seed()
+        self._load_or_initialize_auth_state()
         self.sync_manager.last_imported_count = self.imported_skill_count()
         self.sync_manager.start_scheduler()
         log.info("State backend initialized. target=%s", self.state_store.describe())
@@ -335,6 +336,48 @@ class NexraService:
             }
         self.state_store.save_snapshot(snapshot)
 
+    def _auth_state_supported(self):
+        return hasattr(self.state_store, "load_auth_state") and hasattr(self.state_store, "save_auth_state")
+
+    def _current_auth_state(self):
+        with self.lock, self.connect() as conn:
+            return {
+                "users": [dict(row) for row in conn.execute("SELECT * FROM users ORDER BY id ASC").fetchall()],
+                "sessions": [dict(row) for row in conn.execute("SELECT * FROM sessions ORDER BY token ASC").fetchall()],
+            }
+
+    def _save_auth_state(self):
+        if not self._auth_state_supported():
+            self._save_snapshot()
+            return
+        self.state_store.save_auth_state(self._current_auth_state())
+
+    def _load_or_initialize_auth_state(self):
+        if not self._auth_state_supported():
+            return
+        auth_state = self.state_store.load_auth_state() or {}
+        users = auth_state.get("users", [])
+        sessions = auth_state.get("sessions", [])
+        if not users:
+            self._save_auth_state()
+            log.info("Initialized persistent auth state from current in-memory state.")
+            return
+        with self.lock, self.connect() as conn:
+            conn.execute("DELETE FROM sessions")
+            conn.execute("DELETE FROM users")
+            for row in users:
+                conn.execute(
+                    "INSERT INTO users (id, email, password, name, role) VALUES (?, ?, ?, ?, ?)",
+                    (row["id"], row["email"], row["password"], row["name"], row["role"]),
+                )
+            for row in sessions:
+                conn.execute(
+                    "INSERT INTO sessions (token, user_id, created_at) VALUES (?, ?, ?)",
+                    (row["token"], row["user_id"], row["created_at"]),
+                )
+            conn.commit()
+        log.info("Loaded auth state from dedicated auth store. users=%s sessions=%s", len(users), len(sessions))
+
     def read_skill_seed_file(self):
         with self.skill_data_file.open("r", encoding="utf-8") as handle:
             data = json.load(handle)
@@ -472,7 +515,7 @@ class NexraService:
                 (token, row["id"], now_iso()),
             )
             conn.commit()
-            self._save_snapshot()
+            self._save_auth_state()
         log.info("User logged in. userId=%s, email=%s, role=%s", row["id"], row["email"], row["role"])
         return {"token": token, "user": self._user_response(dict(row))}
 
@@ -505,7 +548,7 @@ class NexraService:
                 (token, user_id, now_iso()),
             )
             conn.commit()
-            self._save_snapshot()
+            self._save_auth_state()
         log.info("User registered. userId=%s, email=%s", user_id, email)
         return {"token": token, "user": self._user_response({"id": user_id, "name": name, "email": email, "role": "USER"})}
 
@@ -515,7 +558,7 @@ class NexraService:
             row = conn.execute("SELECT user_id FROM sessions WHERE token = ?", (token,)).fetchone()
             conn.execute("DELETE FROM sessions WHERE token = ?", (token,))
             conn.commit()
-            self._save_snapshot()
+            self._save_auth_state()
         if row:
             log.info("User logged out. userId=%s", row["user_id"])
         return {"message": "Logged out."}

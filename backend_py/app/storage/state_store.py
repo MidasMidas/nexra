@@ -72,6 +72,32 @@ class PostgresStateStore:
             )
         conn.commit()
 
+    def _ensure_auth_schema(self, conn):
+        with conn.cursor() as cursor:
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS nexra_auth_users (
+                    id TEXT PRIMARY KEY,
+                    email TEXT NOT NULL UNIQUE,
+                    password TEXT NOT NULL,
+                    name TEXT NOT NULL,
+                    role TEXT NOT NULL,
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                )
+                """
+            )
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS nexra_auth_sessions (
+                    token TEXT PRIMARY KEY,
+                    user_id TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                )
+                """
+            )
+        conn.commit()
+
     def load_snapshot(self):
         with self._connect() as conn:
             self._ensure_schema(conn)
@@ -103,6 +129,72 @@ class PostgresStateStore:
                     """,
                     (self.state_key, payload),
                 )
+            conn.commit()
+
+    def load_auth_state(self):
+        with self._connect() as conn:
+            self._ensure_auth_schema(conn)
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    "SELECT id, email, password, name, role FROM nexra_auth_users ORDER BY id ASC"
+                )
+                users = [
+                    {
+                        "id": row[0],
+                        "email": row[1],
+                        "password": row[2],
+                        "name": row[3],
+                        "role": row[4],
+                    }
+                    for row in cursor.fetchall()
+                ]
+                cursor.execute(
+                    "SELECT token, user_id, created_at FROM nexra_auth_sessions ORDER BY token ASC"
+                )
+                sessions = [
+                    {
+                        "token": row[0],
+                        "user_id": row[1],
+                        "created_at": row[2],
+                    }
+                    for row in cursor.fetchall()
+                ]
+        return {"users": users, "sessions": sessions}
+
+    def save_auth_state(self, auth_state):
+        users = auth_state.get("users", [])
+        sessions = auth_state.get("sessions", [])
+        with self._connect() as conn:
+            self._ensure_auth_schema(conn)
+            with conn.cursor() as cursor:
+                cursor.execute("DELETE FROM nexra_auth_sessions")
+                cursor.execute("DELETE FROM nexra_auth_users")
+                for user in users:
+                    cursor.execute(
+                        """
+                        INSERT INTO nexra_auth_users (id, email, password, name, role, updated_at)
+                        VALUES (%s, %s, %s, %s, %s, NOW())
+                        """,
+                        (
+                            user["id"],
+                            user["email"],
+                            user["password"],
+                            user["name"],
+                            user["role"],
+                        ),
+                    )
+                for session in sessions:
+                    cursor.execute(
+                        """
+                        INSERT INTO nexra_auth_sessions (token, user_id, created_at, updated_at)
+                        VALUES (%s, %s, %s, NOW())
+                        """,
+                        (
+                            session["token"],
+                            session["user_id"],
+                            session["created_at"],
+                        ),
+                    )
             conn.commit()
 
     def describe(self):
