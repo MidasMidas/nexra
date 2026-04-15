@@ -47,9 +47,9 @@ def create_handler(app):
         def route(self, method, path, query, payload):
             auth = self.headers.get("Authorization")
             if method == "GET" and path == "/api":
-                return app.get_welcome()
+                return app.get_welcome(self._request_origin(), self._api_base_url())
             if method == "GET" and path == "/api/agent-guide":
-                return app.get_agent_guide()
+                return app.get_agent_guide(self._request_origin(), self._api_base_url())
             if method == "GET" and path == "/api/dashboard":
                 return app.get_dashboard()
             if method == "POST" and path == "/api/auth/login":
@@ -119,6 +119,16 @@ def create_handler(app):
             self._write_headers(len(body))
             self.end_headers()
             self.wfile.write(body)
+
+        def _request_origin(self):
+            forwarded_host = self.headers.get("X-Forwarded-Host")
+            host = forwarded_host or self.headers.get("Host") or f"{self.server.server_name}:{self.server.server_port}"
+            forwarded_proto = self.headers.get("X-Forwarded-Proto")
+            proto = forwarded_proto or ("https" if str(self.server.server_port) == "443" else "http")
+            return f"{proto}://{host}"
+
+        def _api_base_url(self):
+            return f"{self._request_origin()}/api"
 
         def _write_headers(self, content_length=0):
             self.send_header("Content-Type", "application/json; charset=utf-8")

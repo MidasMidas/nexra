@@ -1,6 +1,7 @@
 ﻿import json
 import logging
 import math
+import re
 import sqlite3
 import threading
 import uuid
@@ -14,6 +15,29 @@ from app.storage.state_store import create_state_store
 
 
 log = logging.getLogger("nexra-python")
+
+QUERY_INTENT_TERMS = {
+    "writing": {
+        "positive": [
+            "writing", "write", "writer", "copywriting", "content", "content creation",
+            "blog", "article", "draft", "rewrite", "rewriting", "story", "novel",
+            "script", "text summarization", "summarization", "summary", "report generation",
+        ],
+        "negative": [
+            "filesystem access", "file operations", "file management", "write files",
+            "writing files", "local file", "storage",
+        ],
+    },
+    "summarization": {
+        "positive": [
+            "summary", "summarization", "summarize", "text summarization", "report generation",
+            "notes", "brief", "digest",
+        ],
+        "negative": [
+            "filesystem access", "file operations", "storage",
+        ],
+    },
+}
 
 class NexraService:
     def __init__(self):
@@ -466,7 +490,9 @@ class NexraService:
             "topSkills": top_skills,
         }
 
-    def get_welcome(self):
+    def get_welcome(self, frontend_origin=None, api_base_url=None):
+        frontend_url = frontend_origin or "http://127.0.0.1:4173"
+        agent_guide_url = f"{(api_base_url or 'http://localhost:8080/api').rstrip('/')}/agent-guide"
         return {
             "productName": "Nexra",
             "headline": "Find the right skill before your agent calls it",
@@ -482,11 +508,12 @@ class NexraService:
                 "Dual scoring with user rating and system rating",
                 "Moderation, governance, and calling guidance in one place",
             ],
-            "frontendUrl": "http://127.0.0.1:4173",
-            "agentGuideUrl": "http://localhost:8080/api/agent-guide",
+            "frontendUrl": frontend_url,
+            "agentGuideUrl": agent_guide_url,
         }
 
-    def get_agent_guide(self):
+    def get_agent_guide(self, frontend_origin=None, api_base_url=None):
+        api_base = (api_base_url or "http://localhost:8080/api").rstrip("/")
         return {
             "name": "Nexra Agent Guide",
             "goal": "Help any AI agent discover, choose, and call external skills correctly.",
@@ -508,7 +535,7 @@ class NexraService:
             ],
             "exampleCall": {
                 "method": "GET",
-                "endpoint": "/api/skills?q=image&function=ocr&page=0&pageSize=5",
+                "endpoint": f"{api_base}/skills?q=image&function=ocr&page=0&pageSize=5",
                 "contentType": "application/json",
                 "payload": "{\"note\":\"Choose a skill from the search results, then call the provider directly.\"}",
             },
@@ -870,6 +897,38 @@ class NexraService:
         text = safe_text(value).strip()
         return text or fallback
 
+    def expanded_query_terms(self, query):
+        normalized = safe_text(query).strip().lower()
+        if not normalized:
+            return []
+        terms = {normalized}
+        terms.update(token for token in re.split(r"[^a-z0-9]+", normalized) if token)
+        intent = QUERY_INTENT_TERMS.get(normalized)
+        if intent:
+            terms.update(intent["positive"])
+        return [term for term in terms if term]
+
+    def intent_adjustment(self, skill, query):
+        normalized = safe_text(query).strip().lower()
+        intent = QUERY_INTENT_TERMS.get(normalized)
+        if not intent:
+            return 0
+        searchable = " ".join(
+            [
+                skill["name"],
+                skill["category"],
+                skill["description"],
+                skill["invocationMethod"],
+                " ".join(skill["functions"]),
+            ]
+        ).lower()
+        bonus = 0
+        if any(term in searchable for term in intent["positive"]):
+            bonus += 18
+        if any(term in searchable for term in intent["negative"]):
+            bonus -= 20
+        return bonus
+
     def normalized_user_rating(self, skill):
         return round((float(skill["userRatingAvg"]) / 5.0) * 100)
 
@@ -887,6 +946,7 @@ class NexraService:
         score = 0
         normalized_query = safe_text(query).strip().lower()
         normalized_function = safe_text(function_name).strip().lower()
+        query_terms = self.expanded_query_terms(query)
         haystack = " ".join(
             [
                 skill["name"].lower(),
@@ -907,6 +967,13 @@ class NexraService:
                 score += 10
             if any(normalized_query in item.lower() for item in skill["functions"]):
                 score += 15
+            for term in query_terms:
+                if term in skill["category"].lower():
+                    score += 4
+                if any(term in item.lower() for item in skill["functions"]):
+                    score += 6
+                if term in skill["description"].lower():
+                    score += 3
         if normalized_function:
             if any(item.lower() == normalized_function for item in skill["functions"]):
                 score += 35
@@ -914,6 +981,7 @@ class NexraService:
                 score += 25
             elif normalized_function in haystack:
                 score += 15
+        score += self.intent_adjustment(skill, query)
         return int(clamp(score, 0, 100))
 
     def recommendation_score(self, skill, query, function_name):
@@ -984,10 +1052,13 @@ class NexraService:
         normalized = safe_text(query).strip().lower()
         if not normalized:
             return True
+        query_terms = self.expanded_query_terms(query)
         searchable = " ".join(
             [skill["name"], skill["category"], skill["description"], " ".join(skill["functions"]), skill["invocationMethod"]]
         ).lower()
-        return normalized in searchable
+        if normalized in searchable:
+            return True
+        return any(term in searchable for term in query_terms)
 
     def matches_function(self, skill, function_name):
         normalized = safe_text(function_name).strip().lower()
