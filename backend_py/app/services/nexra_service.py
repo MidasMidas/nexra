@@ -480,8 +480,11 @@ class NexraService:
         name = safe_text(payload.get("name")).strip()
         email = safe_text(payload.get("email")).strip().lower()
         password = safe_text(payload.get("password"))
-        if not name or not email or len(password) < 6:
+        if not email or len(password) < 6:
             raise ApiError(400, "Invalid request: registration fields are incomplete.")
+        if not name:
+            local_part = email.split("@", 1)[0].strip()
+            name = local_part or "Nexra User"
         with self.connect() as conn:
             existing = conn.execute("SELECT id FROM users WHERE email = ?", (email,)).fetchone()
             if existing:
