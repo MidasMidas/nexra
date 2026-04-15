@@ -86,7 +86,8 @@ QUERY_INTENT_TERMS = {
 }
 
 class NexraService:
-    def __init__(self):
+    def __init__(self, load_catalog=True):
+        self.load_catalog = load_catalog
         self.config = self._load_config()
         self.skill_data_file = ROOT / self.config["skillDataFile"]
         self.state_store = create_state_store(self.config)
@@ -105,10 +106,13 @@ class NexraService:
         self.conn = sqlite3.connect(":memory:", check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
         self._init_db()
-        self._load_snapshot_or_seed()
-        self._load_or_initialize_auth_state()
-        self.sync_manager.last_imported_count = self.imported_skill_count()
-        self.sync_manager.start_scheduler()
+        if self.load_catalog:
+            self._load_snapshot_or_seed()
+            self._load_or_initialize_auth_state()
+            self.sync_manager.last_imported_count = self.imported_skill_count()
+            self.sync_manager.start_scheduler()
+        else:
+            self._load_auth_only_state()
         log.info("State backend initialized. target=%s", self.state_store.describe())
 
     def connect(self):
@@ -186,14 +190,7 @@ class NexraService:
         with self.lock, self.connect() as conn:
             seeded = False
             if conn.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0:
-                conn.executemany(
-                    "INSERT INTO users (id, email, password, name, role) VALUES (?, ?, ?, ?, ?)",
-                    [
-                        ("admin_1", "admin@nexra.local", "admin123", "Nexra Admin", "ADMIN"),
-                        ("user_1", "alice@nexra.local", "alice123", "Alice Builder", "USER"),
-                        ("user_2", "bob@nexra.local", "bob123", "Bob Operator", "USER"),
-                    ],
-                )
+                self._seed_default_users(conn)
                 log.info("Seeded default user accounts.")
                 seeded = True
 
@@ -252,6 +249,16 @@ class NexraService:
             if seeded:
                 conn.commit()
                 self._save_snapshot()
+
+    def _seed_default_users(self, conn):
+        conn.executemany(
+            "INSERT INTO users (id, email, password, name, role) VALUES (?, ?, ?, ?, ?)",
+            [
+                ("admin_1", "admin@nexra.local", "admin123", "Nexra Admin", "ADMIN"),
+                ("user_1", "alice@nexra.local", "alice123", "Alice Builder", "USER"),
+                ("user_2", "bob@nexra.local", "bob123", "Bob Operator", "USER"),
+            ],
+        )
 
     def _load_snapshot_or_seed(self):
         snapshot = self.state_store.load_snapshot()
@@ -377,6 +384,37 @@ class NexraService:
                 )
             conn.commit()
         log.info("Loaded auth state from dedicated auth store. users=%s sessions=%s", len(users), len(sessions))
+
+    def _load_auth_only_state(self):
+        if not self._auth_state_supported():
+            self._load_snapshot_or_seed()
+            return
+        auth_state = self.state_store.load_auth_state() or {}
+        users = auth_state.get("users", [])
+        sessions = auth_state.get("sessions", [])
+        if not users:
+            snapshot = self.state_store.load_snapshot() or {}
+            users = snapshot.get("users", [])
+            sessions = snapshot.get("sessions", [])
+        with self.lock, self.connect() as conn:
+            conn.execute("DELETE FROM sessions")
+            conn.execute("DELETE FROM users")
+            if users:
+                for row in users:
+                    conn.execute(
+                        "INSERT INTO users (id, email, password, name, role) VALUES (?, ?, ?, ?, ?)",
+                        (row["id"], row["email"], row["password"], row["name"], row["role"]),
+                    )
+                for row in sessions:
+                    conn.execute(
+                        "INSERT INTO sessions (token, user_id, created_at) VALUES (?, ?, ?)",
+                        (row["token"], row["user_id"], row["created_at"]),
+                    )
+            else:
+                self._seed_default_users(conn)
+            conn.commit()
+        self._save_auth_state()
+        log.info("Initialized auth-only runtime. users=%s sessions=%s", len(users) or 3, len(sessions))
 
     def read_skill_seed_file(self):
         with self.skill_data_file.open("r", encoding="utf-8") as handle:

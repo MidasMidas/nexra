@@ -15,8 +15,22 @@ from app.http.handler import create_handler
 from app.services.nexra_service import NexraService
 
 configure_logging()
-service = NexraService()
-_handler_cls: Type[BaseHTTPRequestHandler] = create_handler(service)
+_full_service = None
+_auth_service = None
+
+
+def resolve_service(method: str, path: str):
+    global _full_service, _auth_service
+    if path.startswith("/api/auth/"):
+        if _auth_service is None:
+            _auth_service = NexraService(load_catalog=False)
+        return _auth_service
+    if _full_service is None:
+        _full_service = NexraService(load_catalog=True)
+    return _full_service
+
+
+_handler_cls: Type[BaseHTTPRequestHandler] = create_handler(resolve_service)
 
 
 class handler(_handler_cls):

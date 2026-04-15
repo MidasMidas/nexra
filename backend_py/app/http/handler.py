@@ -13,6 +13,9 @@ def create_handler(app):
     class NexraHandler(BaseHTTPRequestHandler):
         server_version = "NexraPython/1.0"
 
+        def _app(self, method, path):
+            return app(method, path) if callable(app) else app
+
         def do_OPTIONS(self):
             self.send_response(204)
             self._write_headers()
@@ -45,21 +48,22 @@ def create_handler(app):
                 self._send_json(500, {"message": "Internal server error."})
 
         def route(self, method, path, query, payload):
+            current_app = self._app(method, path)
             auth = self.headers.get("Authorization")
             if method == "GET" and path == "/api":
-                return app.get_welcome(self._request_origin(), self._api_base_url())
+                return current_app.get_welcome(self._request_origin(), self._api_base_url())
             if method == "GET" and path == "/api/agent-guide":
-                return app.get_agent_guide(self._request_origin(), self._api_base_url())
+                return current_app.get_agent_guide(self._request_origin(), self._api_base_url())
             if method == "GET" and path == "/api/dashboard":
-                return app.get_dashboard()
+                return current_app.get_dashboard()
             if method == "POST" and path == "/api/auth/login":
-                return app.login(payload or {})
+                return current_app.login(payload or {})
             if method == "POST" and path == "/api/auth/register":
-                return app.register(payload or {})
+                return current_app.register(payload or {})
             if method == "POST" and path == "/api/auth/logout":
-                return app.logout(auth)
+                return current_app.logout(auth)
             if method == "GET" and path == "/api/skills":
-                return app.search_skills(
+                return current_app.search_skills(
                     query=query.get("q", ""),
                     function_name=query.get("function", ""),
                     readiness=query.get("readiness", ""),
@@ -70,39 +74,39 @@ def create_handler(app):
                     sort_by=query.get("sortBy", "score"),
                 )
             if method == "GET" and path.startswith("/api/skills/") and not path.endswith("/reviews"):
-                return app.get_skill_detail(path.removeprefix("/api/skills/"))
+                return current_app.get_skill_detail(path.removeprefix("/api/skills/"))
             if method == "POST" and path == "/api/skills/submissions":
-                return app.submit_skill(auth, payload or {})
+                return current_app.submit_skill(auth, payload or {})
             if method == "POST" and path.endswith("/reviews") and path.startswith("/api/skills/"):
                 skill_id = path[len("/api/skills/") : -len("/reviews")]
-                return app.add_review(auth, skill_id, payload or {})
+                return current_app.add_review(auth, skill_id, payload or {})
             if method == "GET" and path == "/api/users":
-                return app.get_users(auth)
+                return current_app.get_users(auth)
             if method == "GET" and path == "/api/users/me":
-                return app.get_user_profile(auth)
+                return current_app.get_user_profile(auth)
             if method == "GET" and path == "/api/billing/summary":
-                return app.get_billing_summary(auth)
+                return current_app.get_billing_summary(auth)
             if method == "GET" and path == "/api/billing/transactions":
-                return app.get_transactions(auth)
+                return current_app.get_transactions(auth)
             if method == "GET" and path == "/api/keys":
-                return app.get_api_keys(auth)
+                return current_app.get_api_keys(auth)
             if method == "POST" and path == "/api/keys":
-                return app.create_api_key(auth, payload or {})
+                return current_app.create_api_key(auth, payload or {})
             if method == "GET" and path == "/api/admin/skills/pending":
-                return app.get_pending_skills(auth)
+                return current_app.get_pending_skills(auth)
             if method == "POST" and path.startswith("/api/admin/skills/") and path.endswith("/approve"):
                 skill_id = path[len("/api/admin/skills/") : -len("/approve")]
-                return app.approve_skill(auth, skill_id)
+                return current_app.approve_skill(auth, skill_id)
             if method == "PUT" and path.startswith("/api/admin/skills/"):
-                return app.admin_update_skill(auth, path.removeprefix("/api/admin/skills/"), payload or {})
+                return current_app.admin_update_skill(auth, path.removeprefix("/api/admin/skills/"), payload or {})
             if method == "DELETE" and path.startswith("/api/admin/skills/"):
-                return app.admin_delete_skill(auth, path.removeprefix("/api/admin/skills/"))
+                return current_app.admin_delete_skill(auth, path.removeprefix("/api/admin/skills/"))
             if method == "GET" and path == "/api/admin/skills/sync/status":
-                app.require_admin(auth)
-                return app.sync_manager.status()
+                current_app.require_admin(auth)
+                return current_app.sync_manager.status()
             if method == "POST" and path == "/api/admin/skills/sync":
-                app.require_admin(auth)
-                return app.sync_manager.sync_now(trigger="manual")
+                current_app.require_admin(auth)
+                return current_app.sync_manager.sync_now(trigger="manual")
             raise ApiError(404, f"Path not found: {path}")
 
         def _read_json_body(self):
