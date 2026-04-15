@@ -1600,20 +1600,20 @@ async function refreshData(alsoReloadSkill) {
   if (userProfile?.user) {
     state.currentUser = userProfile.user;
   }
-  if (isAdmin()) {
-    state.pendingSkills = await api("/admin/skills/pending", { headers: authHeaders() }).catch((error) => {
-      if (error.status === 401 || error.status === 403) {
-        return [];
-      }
-      throw error;
-    });
-  } else {
-    state.pendingSkills = [];
-  }
+  const pendingSkillsPromise = isAdmin()
+    ? api("/admin/skills/pending", { headers: authHeaders() }).catch((error) => {
+        if (error.status === 401 || error.status === 403) {
+          return [];
+        }
+        throw error;
+      })
+    : Promise.resolve([]);
 
-  if (alsoReloadSkill || !state.skillDetail) {
+  if (alsoReloadSkill || (state.selectedView === "skill" && (state.selectedSkillId || state.skills.length))) {
     await loadSkillDetail();
   }
+  rerenderViews();
+  state.pendingSkills = await pendingSkillsPromise;
   rerenderViews();
 }
 
@@ -1693,9 +1693,13 @@ async function init() {
   initLoginForm();
   updateLanguageUi();
   setView("welcome");
+  rerenderViews();
+  if (!state.authToken) {
+    showLoginModal();
+  }
   try {
     clearBanner();
-    await refreshData(true);
+    await refreshData(false);
     if (currentUser()) {
       setBanner(withApiBase(tr().connected), "success");
     } else {
