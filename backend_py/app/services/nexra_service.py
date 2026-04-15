@@ -359,6 +359,26 @@ class NexraService:
             return
         self.state_store.save_auth_state(self._current_auth_state())
 
+    def _persist_auth_session(self, token, user_id, created_at):
+        if self._auth_state_supported() and hasattr(self.state_store, "upsert_auth_session"):
+            self.state_store.upsert_auth_session(
+                {"token": token, "user_id": user_id, "created_at": created_at}
+            )
+            return
+        self._save_auth_state()
+
+    def _persist_auth_user(self, user):
+        if self._auth_state_supported() and hasattr(self.state_store, "upsert_auth_user"):
+            self.state_store.upsert_auth_user(user)
+            return
+        self._save_auth_state()
+
+    def _remove_auth_session(self, token):
+        if self._auth_state_supported() and hasattr(self.state_store, "delete_auth_session"):
+            self.state_store.delete_auth_session(token)
+            return
+        self._save_auth_state()
+
     def _load_or_initialize_auth_state(self):
         if not self._auth_state_supported():
             return
@@ -548,12 +568,13 @@ class NexraService:
                 log.warning("Login failed due to invalid password. email=%s", email)
                 raise ApiError(401, "Invalid email or password.")
             token = "nexra_" + uuid.uuid4().hex
+            created_at = now_iso()
             conn.execute(
                 "INSERT OR REPLACE INTO sessions (token, user_id, created_at) VALUES (?, ?, ?)",
-                (token, row["id"], now_iso()),
+                (token, row["id"], created_at),
             )
             conn.commit()
-            self._save_auth_state()
+            self._persist_auth_session(token, row["id"], created_at)
         log.info("User logged in. userId=%s, email=%s, role=%s", row["id"], row["email"], row["role"])
         return {"token": token, "user": self._user_response(dict(row))}
 
@@ -581,12 +602,16 @@ class NexraService:
                 (user_id, email, password, name, "USER"),
             )
             token = "nexra_" + uuid.uuid4().hex
+            created_at = now_iso()
             conn.execute(
                 "INSERT INTO sessions (token, user_id, created_at) VALUES (?, ?, ?)",
-                (token, user_id, now_iso()),
+                (token, user_id, created_at),
             )
             conn.commit()
-            self._save_auth_state()
+            self._persist_auth_user(
+                {"id": user_id, "email": email, "password": password, "name": name, "role": "USER"}
+            )
+            self._persist_auth_session(token, user_id, created_at)
         log.info("User registered. userId=%s, email=%s", user_id, email)
         return {"token": token, "user": self._user_response({"id": user_id, "name": name, "email": email, "role": "USER"})}
 
@@ -596,7 +621,7 @@ class NexraService:
             row = conn.execute("SELECT user_id FROM sessions WHERE token = ?", (token,)).fetchone()
             conn.execute("DELETE FROM sessions WHERE token = ?", (token,))
             conn.commit()
-            self._save_auth_state()
+            self._remove_auth_session(token)
         if row:
             log.info("User logged out. userId=%s", row["user_id"])
         return {"message": "Logged out."}

@@ -197,6 +197,61 @@ class PostgresStateStore:
                     )
             conn.commit()
 
+    def upsert_auth_user(self, user):
+        with self._connect() as conn:
+            self._ensure_auth_schema(conn)
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    """
+                    INSERT INTO nexra_auth_users (id, email, password, name, role, updated_at)
+                    VALUES (%s, %s, %s, %s, %s, NOW())
+                    ON CONFLICT (id)
+                    DO UPDATE SET
+                        email = EXCLUDED.email,
+                        password = EXCLUDED.password,
+                        name = EXCLUDED.name,
+                        role = EXCLUDED.role,
+                        updated_at = NOW()
+                    """,
+                    (
+                        user["id"],
+                        user["email"],
+                        user["password"],
+                        user["name"],
+                        user["role"],
+                    ),
+                )
+            conn.commit()
+
+    def upsert_auth_session(self, session):
+        with self._connect() as conn:
+            self._ensure_auth_schema(conn)
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    """
+                    INSERT INTO nexra_auth_sessions (token, user_id, created_at, updated_at)
+                    VALUES (%s, %s, %s, NOW())
+                    ON CONFLICT (token)
+                    DO UPDATE SET
+                        user_id = EXCLUDED.user_id,
+                        created_at = EXCLUDED.created_at,
+                        updated_at = NOW()
+                    """,
+                    (
+                        session["token"],
+                        session["user_id"],
+                        session["created_at"],
+                    ),
+                )
+            conn.commit()
+
+    def delete_auth_session(self, token):
+        with self._connect() as conn:
+            self._ensure_auth_schema(conn)
+            with conn.cursor() as cursor:
+                cursor.execute("DELETE FROM nexra_auth_sessions WHERE token = %s", (token,))
+            conn.commit()
+
     def describe(self):
         return f"postgres:{self.state_key}"
 
