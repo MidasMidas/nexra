@@ -360,6 +360,8 @@ const state = {
   selectedRating: 0,
   language: "en",
   authMode: "login",
+  authModalVisible: false,
+  authFeedback: null,
   authToken: window.localStorage.getItem("nexra-auth-token"),
   currentUser: null,
   welcome: null,
@@ -391,6 +393,7 @@ const authPill = document.querySelector("#auth-pill");
 const authModeTabs = document.querySelector("#auth-mode-tabs");
 const authLoginTab = document.querySelector("#auth-login-tab");
 const authRegisterTab = document.querySelector("#auth-register-tab");
+const authFeedback = document.querySelector("#auth-feedback");
 const loginForm = document.querySelector("#login-form");
 const loginNameLabel = document.querySelector("#login-name-label");
 const loginNameInput = document.querySelector("#login-name");
@@ -562,6 +565,30 @@ function clearBanner() {
   statusBanner.textContent = "";
 }
 
+function setAuthFeedback(message, type = "error") {
+  state.authFeedback = {
+    message: withApiBase(message),
+    type
+  };
+  renderAuthFeedback();
+}
+
+function clearAuthFeedback() {
+  state.authFeedback = null;
+  renderAuthFeedback();
+}
+
+function renderAuthFeedback() {
+  if (!authFeedback) return;
+  if (!state.authFeedback?.message) {
+    authFeedback.className = "auth-feedback hidden";
+    authFeedback.textContent = "";
+    return;
+  }
+  authFeedback.className = `auth-feedback ${state.authFeedback.type}`;
+  authFeedback.textContent = state.authFeedback.message;
+}
+
 function withApiBase(text) {
   return String(text ?? "").replaceAll("{apiBase}", API_ORIGIN_DISPLAY);
 }
@@ -642,6 +669,7 @@ function updateLanguageUi() {
   loginUsernameLabel.textContent = tr().loginUsername;
   loginPasswordLabel.textContent = tr().loginPassword;
   loginSubmit.textContent = state.authMode === "register" ? tr().registerAction : tr().loginAction;
+  renderAuthFeedback();
 }
 
 function renderAuthMode() {
@@ -655,6 +683,7 @@ function renderAuthMode() {
   loginCopy.textContent = isRegister ? tr().loginRegisterCopy : tr().loginCopy;
   authPill.textContent = isRegister ? tr().authRegisterPill : tr().authLoginPill;
   loginSubmit.textContent = isRegister ? tr().registerAction : tr().loginAction;
+  renderAuthFeedback();
 }
 
 function allowedViews() {
@@ -681,21 +710,26 @@ function renderNavigation() {
 }
 
 function showLoginModal() {
+  state.authModalVisible = true;
   loginModal.classList.remove("hidden");
   renderAuthMode();
+  renderAuthFeedback();
   const target = state.authMode === "register" ? loginNameInput : loginEmailInput;
   window.setTimeout(() => target?.focus(), 0);
 }
 
 function hideLoginModal() {
+  state.authModalVisible = false;
   loginModal.classList.add("hidden");
 }
 
-function signIn(token, user) {
+function signIn(token, user, hideModal = true) {
   state.authToken = token;
   state.currentUser = user;
   window.localStorage.setItem("nexra-auth-token", token);
-  hideLoginModal();
+  if (hideModal) {
+    hideLoginModal();
+  }
 }
 
 async function signOut() {
@@ -716,11 +750,8 @@ async function signOut() {
 
 function renderLoginModal() {
   renderAuthMode();
-  if (!currentUser()) {
-    showLoginModal();
-  } else {
-    hideLoginModal();
-  }
+  renderAuthFeedback();
+  loginModal.classList.toggle("hidden", !state.authModalVisible);
 }
 
 function renderSessionControls() {
@@ -1610,6 +1641,7 @@ function initAuthModeTabs() {
     const button = event.target.closest("[data-auth-mode]");
     if (!button) return;
     state.authMode = button.dataset.authMode;
+    clearAuthFeedback();
     renderLoginModal();
     updateLanguageUi();
   });
@@ -1618,6 +1650,7 @@ function initAuthModeTabs() {
 function initLoginForm() {
   loginForm.addEventListener("submit", async (event) => {
     event.preventDefault();
+    clearAuthFeedback();
     const formData = new FormData(loginForm);
     const name = String(formData.get("name") || "").trim();
     const email = String(formData.get("username") || "").trim();
@@ -1632,14 +1665,22 @@ function initLoginForm() {
         method: "POST",
         body: JSON.stringify(payload)
       });
-      signIn(response.token, response.user);
+      signIn(response.token, response.user, false);
       loginForm.reset();
       state.authMode = "login";
+      const successMessage = isRegister ? tr().registerSuccess : tr().loginSuccess;
+      setAuthFeedback(successMessage, "success");
       await refreshData(true);
-      setBanner(withApiBase(isRegister ? tr().registerSuccess : tr().loginSuccess), "success");
+      setBanner(withApiBase(successMessage), "success");
+      window.setTimeout(() => {
+        clearAuthFeedback();
+        hideLoginModal();
+      }, 900);
     } catch (error) {
       const failureCopy = isRegister ? tr().registerFailed : tr().loginFailed;
-      setBanner(withApiBase(failureCopy.replace("{error}", error.message)), "error");
+      const failureMessage = failureCopy.replace("{error}", error.message);
+      setAuthFeedback(failureMessage, "error");
+      setBanner(withApiBase(failureMessage), "error");
       showLoginModal();
     }
   });

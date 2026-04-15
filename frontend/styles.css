@@ -152,6 +152,24 @@ button, input, textarea, select { font: inherit; }
   border: 1px solid var(--line);
   box-shadow: var(--shadow);
 }
+.auth-feedback {
+  margin: 14px 0 18px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid transparent;
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+.auth-feedback.error {
+  background: rgba(159, 58, 73, 0.09);
+  border-color: rgba(159, 58, 73, 0.28);
+  color: #8d2334;
+}
+.auth-feedback.success {
+  background: rgba(15, 118, 110, 0.08);
+  border-color: rgba(15, 118, 110, 0.24);
+  color: #0d625a;
+}
 .pagination-row,
 .toolbar-row {
   display: flex;
