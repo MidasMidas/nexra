@@ -13,6 +13,7 @@ test-output/
 *.log
 *.sqlite
 *.db
+_docx_unpacked/
 
 .vercel
 .env
