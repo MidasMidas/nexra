@@ -589,7 +589,7 @@ class NexraService:
 
     def search_skills(self, query, function_name, readiness, hide_templates, page, page_size, include_pending=False):
         safe_page = max(page, 0)
-        safe_page_size = max(min(page_size, 50), 1)
+        safe_page_size = max(min(page_size, 10), 1)
         skills = self._fetch_all_skills()
         filtered = []
         for skill in skills:
@@ -603,7 +603,12 @@ class NexraService:
                 continue
             filtered.append(skill)
         filtered.sort(
-            key=lambda item: (self.recommendation_score(item, query, function_name), self.overall_trust(item)),
+            key=lambda item: (
+                self.overall_trust(item),
+                self.recommendation_score(item, query, function_name),
+                self.agent_score(item),
+                item["userRatingAvg"],
+            ),
             reverse=True,
         )
         start = min(safe_page * safe_page_size, len(filtered))
