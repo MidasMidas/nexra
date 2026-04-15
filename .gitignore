@@ -1,4 +1,4 @@
-.runtime/
+﻿.runtime/
 logs/
 backend/target/
 backend/data/
@@ -14,6 +14,7 @@ test-output/
 *.sqlite
 *.db
 _docx_unpacked/
+硬件参数.png
 
 .vercel
 .env

@@ -1,5 +1,7 @@
 ﻿# Nexra
 
+**English** | [中文](./README.zh-CN.md)
+
 Nexra is an open-source full-stack platform for AI skill discovery, scoring, and recommendation.
 
 Instead of forwarding requests or running third-party skills for agents, Nexra focuses on the first-step problem: helping users and agents find the right skill, compare quality signals, understand how a skill should be called, and decide whether it is trustworthy enough to use.
@@ -143,6 +145,7 @@ Files you should create locally but not commit:
 - `backend_py/data/nexra-state.json`
 - `.runtime/`
 - `logs/`
+- `硬件参数.png`
 
 Templates included in the repo:
 
@@ -240,7 +243,7 @@ Good first contribution areas:
 - Better skill import quality and deduplication
 - Improved onboarding and tutorial UX
 
-See [CONTRIBUTING.md](/C:/Workspace/nexra/CONTRIBUTING.md) for contribution notes.
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for contribution notes.
 
 ## License
 
