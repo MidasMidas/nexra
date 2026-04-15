@@ -587,35 +587,54 @@ class NexraService:
             },
         }
 
-    def search_skills(self, query, function_name, readiness, hide_templates, page, page_size, include_pending=False):
+    def search_skills(
+        self,
+        query,
+        function_name,
+        readiness,
+        hide_templates,
+        page,
+        page_size,
+        include_pending=False,
+        sort_by="score",
+    ):
         safe_page = max(page, 0)
         safe_page_size = max(min(page_size, 10), 1)
         skills = self._fetch_all_skills()
         filtered = []
+        fallback_candidates = []
+        minimum_match = self.minimum_match_threshold(query, function_name)
         for skill in skills:
             if not include_pending and skill["approvalStatus"].upper() != "APPROVED":
                 continue
-            if not self.matches_query(skill, query):
+            if not self.matches_query(skill, query, function_name, minimum_match):
                 continue
             if not self.matches_function(skill, function_name):
                 continue
             if not self.matches_readiness(skill, readiness, hide_templates):
                 continue
+            match_score = self.match_score(skill, query, function_name)
+            if self.has_search_terms(query, function_name) and match_score < minimum_match:
+                fallback_candidates.append(skill)
+                continue
             filtered.append(skill)
+        if not filtered and fallback_candidates:
+            fallback_threshold = max(minimum_match - 12, 8)
+            filtered = [
+                skill
+                for skill in fallback_candidates
+                if self.match_score(skill, query, function_name) >= fallback_threshold
+            ]
+        normalized_sort = self.normalize_sort_by(sort_by)
         filtered.sort(
-            key=lambda item: (
-                self.overall_trust(item),
-                self.recommendation_score(item, query, function_name),
-                self.agent_score(item),
-                item["userRatingAvg"],
-            ),
+            key=lambda item: self.skill_sort_key(item, query, function_name, normalized_sort),
             reverse=True,
         )
         start = min(safe_page * safe_page_size, len(filtered))
         end = min(start + safe_page_size, len(filtered))
         total_pages = 0 if not filtered else math.ceil(len(filtered) / safe_page_size)
         log.info(
-            "Skill search executed. query='%s', function='%s', readiness='%s', hideTemplates=%s, includePending=%s, page=%s, pageSize=%s, totalItems=%s",
+            "Skill search executed. query='%s', function='%s', readiness='%s', hideTemplates=%s, includePending=%s, page=%s, pageSize=%s, sortBy=%s, minMatch=%s, totalItems=%s",
             safe_text(query),
             safe_text(function_name),
             safe_text(readiness),
@@ -623,6 +642,8 @@ class NexraService:
             include_pending,
             safe_page,
             safe_page_size,
+            normalized_sort,
+            minimum_match,
             len(filtered),
         )
         return {
@@ -631,6 +652,7 @@ class NexraService:
             "pageSize": safe_page_size,
             "totalItems": len(filtered),
             "totalPages": total_pages,
+            "sortBy": normalized_sort,
         }
 
     def get_skill_detail(self, skill_id):
@@ -1102,17 +1124,45 @@ class NexraService:
             return "credentials"
         return "ready"
 
-    def matches_query(self, skill, query):
-        normalized = safe_text(query).strip().lower()
-        if not normalized:
+    def has_search_terms(self, query, function_name):
+        return bool(safe_text(query).strip() or safe_text(function_name).strip())
+
+    def minimum_match_threshold(self, query, function_name):
+        if not self.has_search_terms(query, function_name):
+            return 0
+        query_text = safe_text(query).strip()
+        function_text = safe_text(function_name).strip()
+        if query_text and function_text:
+            return 30
+        query_word_count = len([part for part in re.split(r"\s+", query_text) if part])
+        if query_word_count >= 2:
+            return 28
+        if len(query_text) >= 10:
+            return 24
+        return 20
+
+    def normalize_sort_by(self, sort_by):
+        normalized = safe_text(sort_by).strip().lower()
+        if normalized == "relevance":
+            return "relevance"
+        return "score"
+
+    def skill_sort_key(self, skill, query, function_name, sort_by):
+        match = self.match_score(skill, query, function_name)
+        recommendation = self.recommendation_score(skill, query, function_name)
+        trust = self.overall_trust(skill)
+        agent = self.agent_score(skill)
+        rating = float(skill["userRatingAvg"])
+        calls = int(skill["recentCalls"])
+        if sort_by == "relevance":
+            return (match, recommendation, trust, agent, calls, rating)
+        return (recommendation, trust, match, agent, rating, calls)
+
+    def matches_query(self, skill, query, function_name="", minimum_match=None):
+        if not self.has_search_terms(query, function_name):
             return True
-        query_terms = self.expanded_query_terms(query)
-        searchable = " ".join(
-            [skill["name"], skill["category"], skill["description"], " ".join(skill["functions"]), skill["invocationMethod"]]
-        ).lower()
-        if normalized in searchable:
-            return True
-        return any(term in searchable for term in query_terms)
+        threshold = self.minimum_match_threshold(query, function_name) if minimum_match is None else minimum_match
+        return self.match_score(skill, query, function_name) >= threshold
 
     def matches_function(self, skill, function_name):
         normalized = safe_text(function_name).strip().lower()

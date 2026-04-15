@@ -67,6 +67,7 @@ def create_handler(app):
                     page=int(query.get("page", "0")),
                     page_size=int(query.get("pageSize", "10")),
                     include_pending=False,
+                    sort_by=query.get("sortBy", "score"),
                 )
             if method == "GET" and path.startswith("/api/skills/") and not path.endswith("/reviews"):
                 return app.get_skill_detail(path.removeprefix("/api/skills/"))
