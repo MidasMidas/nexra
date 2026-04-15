@@ -37,6 +37,52 @@ QUERY_INTENT_TERMS = {
             "filesystem access", "file operations", "storage",
         ],
     },
+    "text to image": {
+        "positive": [
+            "text to image", "image generation", "text-to-image", "media generation",
+            "image generator", "image creation", "generate image", "design & media",
+        ],
+        "negative": [
+            "project management", "ticket management", "design context", "filesystem access",
+            "documentation", "browser automation", "code & git", "repository access",
+        ],
+    },
+    "image edit": {
+        "positive": [
+            "image edit", "image editing", "image generation", "media generation",
+            "design & media", "image",
+        ],
+        "negative": [
+            "project management", "ticket management", "documentation",
+        ],
+    },
+    "ocr": {
+        "positive": [
+            "ocr", "optical character recognition", "pdf", "document extraction",
+            "text extraction", "scan", "image analyzer", "ocr pdf",
+        ],
+        "negative": [
+            "design context", "project management", "browser automation", "documentation lookup", "documentation",
+        ],
+    },
+    "rewrite": {
+        "positive": [
+            "rewrite", "rewriting", "text summarization", "content", "writing",
+            "editor", "prompt", "copywriting",
+        ],
+        "negative": [
+            "database queries", "databases", "ticket management", "project management",
+        ],
+    },
+    "novel": {
+        "positive": [
+            "novel", "story", "writing", "rewrite", "content", "script",
+            "text summarization", "media generation",
+        ],
+        "negative": [
+            "ticket management", "project management", "database queries",
+        ],
+    },
 }
 
 class NexraService:
@@ -927,6 +973,9 @@ class NexraService:
             bonus += 18
         if any(term in searchable for term in intent["negative"]):
             bonus -= 20
+        generic_markers = ["design context", "project management", "ticket management"]
+        if any(marker in searchable for marker in generic_markers) and not any(term in searchable for term in intent["positive"]):
+            bonus -= 12
         return bonus
 
     def normalized_user_rating(self, skill):
