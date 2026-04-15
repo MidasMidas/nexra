@@ -5,4 +5,17 @@ backend/data/
 backend_py/data/
 backend_py/__pycache__/
 frontend/__pycache__/
+api/__pycache__/
+__pycache__/
+*.pyc
+.vercel/
 test-output/
+*.log
+*.sqlite
+*.db
+
+.vercel
+.env
+.env.*
+!.env.example
+backend_py/config.json
