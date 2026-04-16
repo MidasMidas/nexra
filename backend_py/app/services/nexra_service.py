@@ -1,6 +1,10 @@
 ﻿import json
 import logging
+import base64
+import hashlib
+import hmac
 import math
+import os
 import re
 import sqlite3
 import threading
@@ -525,6 +529,9 @@ class NexraService:
 
     def auth_user_id(self, authorization: str):
         token = self.extract_bearer_token(authorization)
+        token_user_id = self._verify_auth_token(token)
+        if token_user_id:
+            return token_user_id
         with self.connect() as conn:
             row = conn.execute("SELECT user_id FROM sessions WHERE token = ?", (token,)).fetchone()
         if row is None:
@@ -554,6 +561,37 @@ class NexraService:
             raise ApiError(401, "Missing bearer token.")
         return token
 
+    def _auth_secret(self):
+        secret = (
+            os.getenv("NEXRA_AUTH_SECRET")
+            or os.getenv("JWT_SECRET")
+            or os.getenv("POSTGRES_URL")
+            or os.getenv("DATABASE_URL")
+            or "nexra-dev-secret"
+        )
+        return secret.encode("utf-8")
+
+    def _issue_auth_token(self, user_id: str):
+        payload = {"user_id": user_id, "iat": now_iso()}
+        payload_bytes = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+        encoded = base64.urlsafe_b64encode(payload_bytes).decode("utf-8").rstrip("=")
+        signature = hmac.new(self._auth_secret(), encoded.encode("utf-8"), hashlib.sha256).hexdigest()
+        return f"nexra_{encoded}.{signature}"
+
+    def _verify_auth_token(self, token: str):
+        if not token.startswith("nexra_") or "." not in token:
+            return None
+        encoded, signature = token[6:].split(".", 1)
+        expected = hmac.new(self._auth_secret(), encoded.encode("utf-8"), hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(signature, expected):
+            return None
+        try:
+            padding = "=" * (-len(encoded) % 4)
+            payload = json.loads(base64.urlsafe_b64decode(encoded + padding).decode("utf-8"))
+        except (ValueError, json.JSONDecodeError):
+            return None
+        return safe_text(payload.get("user_id")).strip() or None
+
     def login(self, payload):
         email = safe_text(payload.get("email")).strip().lower()
         password = safe_text(payload.get("password"))
@@ -567,14 +605,7 @@ class NexraService:
             if row["password"] != password:
                 log.warning("Login failed due to invalid password. email=%s", email)
                 raise ApiError(401, "Invalid email or password.")
-            token = "nexra_" + uuid.uuid4().hex
-            created_at = now_iso()
-            conn.execute(
-                "INSERT OR REPLACE INTO sessions (token, user_id, created_at) VALUES (?, ?, ?)",
-                (token, row["id"], created_at),
-            )
-            conn.commit()
-            self._persist_auth_session(token, row["id"], created_at)
+            token = self._issue_auth_token(row["id"])
         log.info("User logged in. userId=%s, email=%s, role=%s", row["id"], row["email"], row["role"])
         return {"token": token, "user": self._user_response(dict(row))}
 
@@ -601,22 +632,20 @@ class NexraService:
                 "INSERT INTO users (id, email, password, name, role) VALUES (?, ?, ?, ?, ?)",
                 (user_id, email, password, name, "USER"),
             )
-            token = "nexra_" + uuid.uuid4().hex
-            created_at = now_iso()
-            conn.execute(
-                "INSERT INTO sessions (token, user_id, created_at) VALUES (?, ?, ?)",
-                (token, user_id, created_at),
-            )
             conn.commit()
             self._persist_auth_user(
                 {"id": user_id, "email": email, "password": password, "name": name, "role": "USER"}
             )
-            self._persist_auth_session(token, user_id, created_at)
+            token = self._issue_auth_token(user_id)
         log.info("User registered. userId=%s, email=%s", user_id, email)
         return {"token": token, "user": self._user_response({"id": user_id, "name": name, "email": email, "role": "USER"})}
 
     def logout(self, authorization):
         token = self.extract_bearer_token(authorization)
+        token_user_id = self._verify_auth_token(token)
+        if token_user_id:
+            log.info("User logged out. userId=%s", token_user_id)
+            return {"message": "Logged out."}
         with self.connect() as conn:
             row = conn.execute("SELECT user_id FROM sessions WHERE token = ?", (token,)).fetchone()
             conn.execute("DELETE FROM sessions WHERE token = ?", (token,))
