@@ -6,10 +6,10 @@ Nexra is a hosted platform for AI skill discovery, scoring, and recommendation.
 
 Use Nexra directly through the online product and API:
 
-- Web app: [https://nexra-one.vercel.app](https://nexra-one.vercel.app)
-- API base: [https://nexra-one.vercel.app/api](https://nexra-one.vercel.app/api)
-- Dashboard: [https://nexra-one.vercel.app/api/dashboard](https://nexra-one.vercel.app/api/dashboard)
-- Agent guide: [https://nexra-one.vercel.app/api/agent-guide](https://nexra-one.vercel.app/api/agent-guide)
+- Web app: [https://nexracat.com](https://nexracat.com)
+- API base: [https://nexracat.com/api](https://nexracat.com/api)
+- Dashboard: [https://nexracat.com/api/dashboard](https://nexracat.com/api/dashboard)
+- Agent guide: [https://nexracat.com/api/agent-guide](https://nexracat.com/api/agent-guide)
 
 ## What Nexra Does
 
@@ -41,8 +41,9 @@ Public and user flows:
 
 Admin flows:
 
-- `GET /api/admin/skills/pending`
+- `GET /api/admin/skills?status=PENDING|APPROVED|REJECTED&q=&page=&pageSize=`
 - `POST /api/admin/skills/{id}/approve`
+- `POST /api/admin/skills/{id}/reject`
 - `PUT /api/admin/skills/{id}`
 - `DELETE /api/admin/skills/{id}`
 - `GET /api/admin/skills/sync/status`

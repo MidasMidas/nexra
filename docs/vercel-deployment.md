@@ -129,8 +129,8 @@ vercel
 
 当前项目已部署到：
 
-- Web: [https://nexra-one.vercel.app](https://nexra-one.vercel.app)
-- API: [https://nexra-one.vercel.app/api/dashboard](https://nexra-one.vercel.app/api/dashboard)
+- Web: [https://nexracat.com](https://nexracat.com)
+- API: [https://nexracat.com/api/dashboard](https://nexracat.com/api/dashboard)
 
 ## 9. 上线后验证
 

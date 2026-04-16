@@ -147,12 +147,13 @@ Can:
 - `GET /api/skills/{id}`
 - `POST /api/skills/{id}/reviews`
 - `POST /api/skills/submissions`
-- `GET /api/users`
+- `GET /api/users/me`
 
 ### Admin APIs
 
-- `GET /api/admin/skills/pending`
+- `GET /api/admin/skills?status=PENDING|APPROVED|REJECTED&q=&page=&pageSize=`
 - `POST /api/admin/skills/{id}/approve`
+- `POST /api/admin/skills/{id}/reject`
 - `PUT /api/admin/skills/{id}`
 - `DELETE /api/admin/skills/{id}`
 
@@ -175,8 +176,6 @@ Still excluded for now:
 - route forwarding gateway execution
 - third-party skill runtime hosting
 - multi-tenant org model
-- production auth and session system
-- persistent database-backed storage
 - advanced policy engine
 
 ## Next Logical Steps

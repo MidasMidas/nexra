@@ -6,10 +6,10 @@ Nexra 是一个面向 AI Agent 的 skill 搜索、评分与推荐平台。当前
 
 ## 2. 在线入口
 
-- Web 应用: [https://nexra-one.vercel.app](https://nexra-one.vercel.app)
-- API 基地址: [https://nexra-one.vercel.app/api](https://nexra-one.vercel.app/api)
-- Dashboard: [https://nexra-one.vercel.app/api/dashboard](https://nexra-one.vercel.app/api/dashboard)
-- Agent 使用说明: [https://nexra-one.vercel.app/api/agent-guide](https://nexra-one.vercel.app/api/agent-guide)
+- Web 应用: [https://nexracat.com](https://nexracat.com)
+- API 基地址: [https://nexracat.com/api](https://nexracat.com/api)
+- Dashboard: [https://nexracat.com/api/dashboard](https://nexracat.com/api/dashboard)
+- Agent 使用说明: [https://nexracat.com/api/agent-guide](https://nexracat.com/api/agent-guide)
 
 ## 3. 主要能力
 
@@ -112,8 +112,9 @@ GET /api/skills?function=report&page=0&pageSize=5
 
 ## 8. 管理员接口
 
-- `GET /api/admin/skills/pending`
+- `GET /api/admin/skills?status=PENDING|APPROVED|REJECTED&q=&page=&pageSize=`
 - `POST /api/admin/skills/{id}/approve`
+- `POST /api/admin/skills/{id}/reject`
 - `PUT /api/admin/skills/{id}`
 - `DELETE /api/admin/skills/{id}`
 - `GET /api/admin/skills/sync/status`
@@ -121,8 +122,9 @@ GET /api/skills?function=report&page=0&pageSize=5
 
 管理员可以：
 
-- 查看待审核 skill
-- 批准普通用户提交的 skill
+- 在 Admin 页面按 `Pending`、`Approved`、`Rejected` 三个子页面查看 skill
+- 按状态搜索 skill，并分页浏览结果
+- 审核普通用户提交的 skill，支持 `approve` 和 `reject`
 - 修改 skill 评分和详细信息
 - 删除 skill
 - 手动触发 skill 同步
@@ -165,8 +167,9 @@ GET /api/skills?function=report&page=0&pageSize=5
 - `POST /api/skills/{id}/reviews`
 - `POST /api/skills/submissions`
 - `GET /api/users/me`
-- `GET /api/admin/skills/pending`
+- `GET /api/admin/skills?status=PENDING|APPROVED|REJECTED&q=&page=&pageSize=`
 - `POST /api/admin/skills/{id}/approve`
+- `POST /api/admin/skills/{id}/reject`
 - `PUT /api/admin/skills/{id}`
 - `DELETE /api/admin/skills/{id}`
 - `GET /api/admin/skills/sync/status`
