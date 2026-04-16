@@ -440,6 +440,22 @@ class NexraService:
         self._save_auth_state()
         log.info("Initialized auth-only runtime. users=%s sessions=%s", len(users) or 3, len(sessions))
 
+    def _sync_user_from_auth_state(self, user_id: str):
+        if not self._auth_state_supported():
+            return None
+        auth_state = self.state_store.load_auth_state() or {}
+        for row in auth_state.get("users", []):
+            if row.get("id") != user_id:
+                continue
+            with self.lock, self.connect() as conn:
+                conn.execute(
+                    "INSERT OR REPLACE INTO users (id, email, password, name, role) VALUES (?, ?, ?, ?, ?)",
+                    (row["id"], row["email"], row["password"], row["name"], row["role"]),
+                )
+                conn.commit()
+            return row
+        return None
+
     def read_skill_seed_file(self):
         with self.skill_data_file.open("r", encoding="utf-8") as handle:
             data = json.load(handle)
@@ -542,6 +558,9 @@ class NexraService:
         with self.connect() as conn:
             row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
         if row is None:
+            synced = self._sync_user_from_auth_state(user_id)
+            if synced is not None:
+                return synced
             raise ApiError(404, f"User not found: {user_id}")
         return dict(row)
 
