@@ -170,6 +170,9 @@ button, input, textarea, select { font: inherit; }
   border-color: rgba(15, 118, 110, 0.24);
   color: #0d625a;
 }
+.submit-form-feedback {
+  margin: 0 0 6px;
+}
 .pagination-row,
 .toolbar-row {
   display: flex;
@@ -177,6 +180,11 @@ button, input, textarea, select { font: inherit; }
   align-items: center;
   flex-wrap: wrap;
   margin-top: 16px;
+}
+.marketplace-guest-note {
+  flex-basis: 100%;
+  color: var(--muted);
+  font-size: 0.92rem;
 }
 .inline-check {
   display: inline-flex;
@@ -257,6 +265,10 @@ button, input, textarea, select { font: inherit; }
 .helper-text {
   color: var(--muted);
   font-size: 0.9rem;
+}
+.required-mark {
+  color: #8d2334;
+  font-weight: 700;
 }
 .danger-btn {
   cursor: pointer;
@@ -383,6 +395,7 @@ button, input, textarea, select { font: inherit; }
 }
 .score-ring strong { font-size: 1.6rem; }
 .score-list, .review-form, .review-list { display: grid; gap: 10px; }
+.auth-inline { display: grid; gap: 10px; grid-template-columns: minmax(0, 1fr) auto; align-items: end; }
 .score-list div, .inline-stat { display: flex; justify-content: space-between; gap: 12px; }
 .skill-card { display: grid; gap: 16px; }
 .skill-card p, .panel p, .review-card p { margin-top: 0; }
@@ -394,6 +407,13 @@ button, input, textarea, select { font: inherit; }
 }
 .skill-card button, .star, input, select, textarea, .secondary-btn { background: var(--surface-strong); }
 .primary-btn { background: var(--accent); border-color: var(--accent); color: white; }
+button:disabled,
+input:disabled,
+select:disabled,
+textarea:disabled {
+  opacity: 0.58;
+  cursor: not-allowed;
+}
 .filter-row input, .filter-row select, textarea {
   width: 100%;
   border-radius: 14px;
@@ -430,6 +450,7 @@ button, input, textarea, select { font: inherit; }
     flex-direction: column;
     align-items: stretch;
   }
+  .auth-inline { grid-template-columns: 1fr; }
   .hero-actions {
     width: 100%;
     flex-direction: column;

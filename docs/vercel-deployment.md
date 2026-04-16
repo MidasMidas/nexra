@@ -1,6 +1,6 @@
 ﻿# Nexra 部署到 Vercel 指南
 
-这份文档说明如何把当前的 Nexra 前后端一起部署到 Vercel，并接入 Postgres 持久化。
+这份文档说明如何把当前的 Nexra 前后端一起部署到 Vercel，并接入 MySQL 或 Postgres 持久化。
 
 ## 1. 当前架构
 
@@ -8,7 +8,7 @@
 
 - 前端静态页面由 Vercel 直接托管
 - 后端通过 Vercel Python Function 提供 `/api`
-- 运行态状态通过 Postgres 持久化
+- 运行态状态通过 MySQL 或 Postgres 持久化
 - 本地开发时仍可以回退到 JSON 状态文件
 
 推荐架构：
@@ -18,7 +18,7 @@ Browser
   -> Vercel Static Frontend
   -> /api
   -> Vercel Python Function
-  -> Postgres state store
+  -> MySQL / Postgres state store
 ```
 
 ## 2. 仓库里已经包含的部署文件
@@ -37,12 +37,13 @@ Browser
 
 - 一个 Vercel 账号
 - 一个 Git 仓库
-- 一个 Postgres 数据库连接串
+- 一个 MySQL 或 Postgres 数据库连接串
 
 推荐做法：
 
-- 使用 Vercel Marketplace 的 Neon Postgres 免费实例
-- 或者使用任意兼容 PostgreSQL 的托管数据库
+- 使用 PlanetScale 之类的托管 MySQL
+- 或者使用任意兼容 MySQL 8 的托管数据库
+- 也可以继续使用兼容 PostgreSQL 的托管数据库
 
 ## 4. 导入项目到 Vercel
 
@@ -63,19 +64,26 @@ vercel
 
 ## 5. 配置环境变量
 
-至少配置这些变量：
+至少配置这些变量中的一组：
 
-- `POSTGRES_URL`
-- `NEXRA_STATE_BACKEND=postgres`
+- `MYSQL_URL`
+- `NEXRA_STATE_BACKEND=mysql`
 - `NEXRA_STATE_KEY=primary`
 
 可选：
 
+- `MYSQL_HOST`
+- `MYSQL_PORT`
+- `MYSQL_USER`
+- `MYSQL_PASSWORD`
+- `MYSQL_DATABASE`
 - `DATABASE_URL`
+- `POSTGRES_URL`
 
 说明：
 
-- `POSTGRES_URL` 或 `DATABASE_URL` 用于保存应用运行态
+- `MYSQL_URL` 或 `MYSQL_*` 用于保存应用运行态
+- `POSTGRES_URL` 或 `DATABASE_URL` 也仍然兼容
 - 如果线上没有数据库，函数会在某些场景下回退到内存态，数据不能长期保存
 - `NEXRA_STATE_KEY` 用于区分不同环境的状态快照
 
@@ -149,16 +157,16 @@ vercel
 
 通常是：
 
-- `POSTGRES_URL` 不可用
-- `psycopg` 没有正确安装
+- `MYSQL_URL` / `MYSQL_*` 或 `POSTGRES_URL` 不可用
+- `mysql-connector-python` 或 `psycopg` 没有正确安装
 - 函数初始化时连接数据库失败
 
 ### 能访问页面，但数据不持久
 
 通常是：
 
-- 没有配置 `POSTGRES_URL` 或 `DATABASE_URL`
-- `NEXRA_STATE_BACKEND` 未设置为 `postgres`
+- 没有配置 `MYSQL_URL`、`MYSQL_*`、`POSTGRES_URL` 或 `DATABASE_URL`
+- `NEXRA_STATE_BACKEND` 未设置为 `mysql` 或 `postgres`
 
 ## 11. 参考资料
 

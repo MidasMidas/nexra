@@ -1,8 +1,10 @@
 ﻿logs
 .runtime
-backend/target
-backend/data
-backend_py/data
+backend_py/database.private.json
+backend_py/mailer.private.json
+backend_py/data/nexra-state.json
+backend_py/data/nexra-auth.json
+backend_py/data/skills-import-report.json
 backend_py/__pycache__
 frontend/__pycache__
 api/__pycache__
@@ -10,9 +12,3 @@ test-output
 .git
 *.log
 *.pyc
-backend/src/main/java
-backend/src/test
-backend/pom.xml
-backend/mvnw
-backend/mvnw.cmd
-backend/.mvn

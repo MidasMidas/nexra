@@ -1,7 +1,5 @@
 ﻿.runtime/
 logs/
-backend/target/
-backend/data/
 backend_py/data/
 backend_py/__pycache__/
 frontend/__pycache__/
@@ -21,3 +19,5 @@ _docx_unpacked/
 .env.*
 !.env.example
 backend_py/config.json
+backend_py/database.private.json
+backend_py/mailer.private.json

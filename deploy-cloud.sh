@@ -39,7 +39,7 @@ rsync -a --delete \
   --exclude "server.py" \
   "${SOURCE_DIR}/frontend/" "${WEB_DIR}/"
 
-cp "${SOURCE_DIR}/backend/src/main/resources/data/skills.json" "${APP_DIR}/data/skills.json"
+cp "${SOURCE_DIR}/backend_py/data/skills.json" "${APP_DIR}/data/skills.json"
 
 cat > "${APP_DIR}/backend_py/config.json" <<EOF
 {

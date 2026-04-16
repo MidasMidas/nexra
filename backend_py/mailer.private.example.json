@@ -1,0 +1,10 @@
+{
+  "RESEND_API_KEY": "re_xxxxxxxxxxxxxxxxx",
+  "RESEND_FROM": "Nexra <onboarding@resend.dev>",
+  "SMTP_HOST": "smtp.example.com",
+  "SMTP_PORT": "465",
+  "SMTP_USER": "no-reply@example.com",
+  "SMTP_PASSWORD": "replace-with-real-password",
+  "SMTP_FROM": "Nexra <no-reply@example.com>",
+  "SMTP_USE_TLS": "true"
+}

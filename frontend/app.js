@@ -8,8 +8,8 @@ const API_BASE =
 const API_ORIGIN_DISPLAY = API_BASE.replace(/\/api$/, "");
 const copy = {
   en: {
-    nav: { welcome: "Welcome", tutorial: "Tutorial", dashboard: "Dashboard", marketplace: "Marketplace", skill: "Skill Detail", profile: "Profile", admin: "Admin" },
-    hero: { welcome: "Help your agent find the right external skill", tutorial: "Step-by-step guide for skill discovery and external calling", dashboard: "Recommendation signals for external skills", marketplace: "Search and compare external skills by fit, trust, and cost", skill: "Inspect recommendation signals and calling guidance", profile: "Your skills, ratings, and account details", admin: "Review, approve, and maintain submitted skills" },
+    nav: { welcome: "Welcome", tutorial: "Tutorial", dashboard: "Dashboard", marketplace: "Marketplace", submit: "My Skills", skill: "Skill Detail", profile: "Profile", admin: "Admin" },
+    hero: { welcome: "Help your agent find the right external skill", tutorial: "Step-by-step guide for skill discovery and external calling", dashboard: "Recommendation signals for external skills", marketplace: "Search and compare external skills by fit, trust, and cost", submit: "Manage your submitted skills and publish new ones", skill: "Inspect recommendation signals and calling guidance", profile: "Your skills, ratings, and account details", admin: "Review, approve, and maintain submitted skills" },
     language: "Language",
     role: "Role",
     adminOnly: "Admin only",
@@ -22,8 +22,12 @@ const copy = {
     authLoginPill: "Login",
     authRegisterPill: "Register",
     loginName: "Full name",
-    loginRegisterCopy: "Create your Nexra account with email and a password of at least 6 characters.",
+    loginRegisterCopy: "Create your Nexra account with email, a verification code, and a password of at least 6 characters.",
     loginUsername: "Email",
+    registerCodeLabel: "Verification code",
+    registerCodeAction: "Send code",
+    registerCodeSending: "Sending...",
+    registerCodeSent: "Verification code sent. Please check your email.",
     loginPassword: "Password (min 6 characters)",
     loginFailed: "Sign-in failed: {error}",
     loginSuccess: "Signed in successfully.",
@@ -41,8 +45,37 @@ const copy = {
     profileMemberSince: "Signed in as",
     profileEmail: "Email",
     profileSkillStatus: "Status",
+    profileEditSkill: "Edit skill",
+    profileEditTitle: "Edit submitted skill",
+    profilePickSkill: "Choose one of your submitted skills to edit.",
     profileReviewFor: "For skill",
     profileReviewCount: "Total ratings",
+    submitTitle: "Submit a new skill",
+    submitIntro: "Share a new skill so admins can review it and decide whether to publish it in the marketplace.",
+    mySkillsTitle: "My skills",
+    mySkillsIntro: "Review the skills you have submitted, update them, or submit a new one for approval.",
+    mySkillsEmpty: "You have not submitted any skills yet.",
+    mySkillsCreate: "Submit Skill",
+    mySkillsEdit: "Edit",
+    mySkillsCancel: "Cancel",
+    submitRequiredMark: "*",
+    submitRequiredHint: "* Required fields",
+    submitMissingFields: "Please complete required fields: {fields}",
+    submitName: "Name",
+    submitCategory: "Category",
+    submitDescription: "Description",
+    submitFunctions: "Functions",
+    submitInvocationMethod: "Invocation method",
+    submitPrice: "Price per call",
+    submitSource: "Source",
+    submitSourceUrl: "Docs URL",
+    submitSourceAuthor: "Provider name",
+    submitLicense: "License",
+    submitOperatingSystem: "Runtime",
+    submitSave: "Submit skill",
+    submitUpdate: "Save changes",
+    submitSuccess: "Skill submitted for review.",
+    submitUpdateSuccess: "Your submitted skill was updated and sent back for review.",
     welcomeTitle: "How your agent should use Nexra",
     welcomeSteps: "Key steps",
     welcomeCapabilities: "What Nexra gives you",
@@ -98,6 +131,7 @@ const copy = {
     marketplaceHideTemplates: "Hide templates",
     marketplaceUser: "User",
     marketplaceAgent: "Agent",
+    noRating: "No rating",
     marketplaceOpenDetail: "Open detail",
     marketplaceFunction: "Function",
     marketplaceInvocation: "Invocation",
@@ -146,10 +180,17 @@ const copy = {
     skillChooseStar: "Choose a star rating first.",
     skillSaved: "User rating saved. Trust score updated.",
     adminPendingTitle: "Pending skill review",
+    adminApprovedTitle: "Approved skills",
+    adminRejectedTitle: "Rejected skills",
     adminSelectedTitle: "Skill moderation",
     adminEmpty: "No pending skills right now.",
+    adminApprovedEmpty: "No approved skills yet.",
+    adminRejectedEmpty: "No rejected skills yet.",
     adminPick: "Select a pending skill to review and edit.",
     adminApprove: "Approve skill",
+    adminReject: "Reject skill",
+    adminPublish: "Publish",
+    adminUnpublish: "Unpublish",
     adminDelete: "Delete skill",
     adminSave: "Save changes",
     adminFunctions: "Functions",
@@ -168,20 +209,27 @@ const copy = {
     adminUserRatingAvg: "User rating avg",
     adminUserRatingCount: "User rating count",
     adminApproved: "Skill approved.",
+    adminRejected: "Skill rejected.",
+    adminPublished: "Skill published.",
+    adminUnpublished: "Skill unpublished.",
     adminSaved: "Skill changes saved.",
     adminDeleted: "Skill deleted.",
     adminNeedRole: "Switch to an admin user to manage reviews.",
+    adminSearchPlaceholder: "Search skill name, category, provider, or reviewer",
+    adminPageSize: "Page size",
+    adminPage: "Page",
+    adminTotal: "Total",
     errorsTitle: "Common errors",
     error1: "Backend not running: start Nexra and confirm {apiBase}/api/dashboard returns data.",
     error2: "Skill not found: your agent requested an invalid skill id.",
     error3: "Validation error: review payload must include author and a rating from 1 to 5.",
     error4: "Connection refused: your agent cannot reach the local Nexra API endpoint.",
-    connected: "Frontend connected to Spring Boot API at {apiBase}/api.",
-    failed: "Unable to reach backend: {error}. Start the Spring Boot app first."
+    connected: "Frontend connected to the Python API at {apiBase}/api.",
+    failed: "Unable to reach backend: {error}. Start the Python backend first."
   },
   zh: {
-    nav: { welcome: "\u6b22\u8fce", tutorial: "\u6559\u7a0b", dashboard: "\u603b\u89c8", marketplace: "\u6280\u80fd\u5e02\u573a", skill: "\u6280\u80fd\u8be6\u60c5", profile: "\u4e2a\u4eba\u4fe1\u606f", admin: "\u7ba1\u7406\u5458\u540e\u53f0" },
-    hero: { welcome: "\u5e2e\u52a9 Agent \u627e\u5230\u5408\u9002\u7684\u5916\u90e8 skill", tutorial: "\u7ed9 Agent \u7684 skill \u641c\u7d22\u548c\u5916\u90e8\u8c03\u7528\u6559\u7a0b", dashboard: "\u9762\u5411\u5916\u90e8 skill \u7684\u63a8\u8350\u4fe1\u53f7", marketplace: "\u6309\u5339\u914d\u5ea6\u3001\u4fe1\u4efb\u548c\u6210\u672c\u641c\u7d22\u5e76\u6bd4\u8f83 skill", skill: "\u67e5\u770b\u63a8\u8350\u4fe1\u53f7\u4e0e\u8c03\u7528\u8bf4\u660e", profile: "\u67e5\u770b\u4f60\u63d0\u4ea4\u7684 skill \u3001\u8bc4\u5206\u548c\u8d26\u53f7\u4fe1\u606f", admin: "\u5ba1\u6838\u3001\u6279\u51c6\u5e76\u7ef4\u62a4\u63d0\u4ea4\u7684 skill" },
+    nav: { welcome: "\u6b22\u8fce", tutorial: "\u6559\u7a0b", dashboard: "\u603b\u89c8", marketplace: "\u6280\u80fd\u5e02\u573a", submit: "\u6211\u7684 Skills", skill: "\u6280\u80fd\u8be6\u60c5", profile: "\u4e2a\u4eba\u4fe1\u606f", admin: "\u7ba1\u7406\u5458\u540e\u53f0" },
+    hero: { welcome: "\u5e2e\u52a9 Agent \u627e\u5230\u5408\u9002\u7684\u5916\u90e8 skill", tutorial: "\u7ed9 Agent \u7684 skill \u641c\u7d22\u548c\u5916\u90e8\u8c03\u7528\u6559\u7a0b", dashboard: "\u9762\u5411\u5916\u90e8 skill \u7684\u63a8\u8350\u4fe1\u53f7", marketplace: "\u6309\u5339\u914d\u5ea6\u3001\u4fe1\u4efb\u548c\u6210\u672c\u641c\u7d22\u5e76\u6bd4\u8f83 skill", submit: "\u7ba1\u7406\u4f60\u5df2\u63d0\u4ea4\u7684 skill\uff0c\u5e76\u63d0\u4ea4\u65b0 skill", skill: "\u67e5\u770b\u63a8\u8350\u4fe1\u53f7\u4e0e\u8c03\u7528\u8bf4\u660e", profile: "\u67e5\u770b\u4f60\u63d0\u4ea4\u7684 skill \u3001\u8bc4\u5206\u548c\u8d26\u53f7\u4fe1\u606f", admin: "\u5ba1\u6838\u3001\u6279\u51c6\u5e76\u7ef4\u62a4\u63d0\u4ea4\u7684 skill" },
     language: "\u8bed\u8a00",
     role: "\u89d2\u8272",
     adminOnly: "\u4ec5\u7ba1\u7406\u5458",
@@ -194,8 +242,12 @@ const copy = {
     authLoginPill: "\u767b\u5f55",
     authRegisterPill: "\u6ce8\u518c",
     loginName: "\u59d3\u540d",
-    loginRegisterCopy: "\u4f7f\u7528\u90ae\u7bb1\u548c\u5bc6\u7801\u521b\u5efa Nexra \u8d26\u53f7\uff0c\u5bc6\u7801\u81f3\u5c11 6 \u4f4d\u3002",
+    loginRegisterCopy: "\u4f7f\u7528\u90ae\u7bb1\u3001\u90ae\u7bb1\u9a8c\u8bc1\u7801\u548c\u5bc6\u7801\u521b\u5efa Nexra \u8d26\u53f7\uff0c\u5bc6\u7801\u81f3\u5c11 6 \u4f4d\u3002",
     loginUsername: "\u90ae\u7bb1",
+    registerCodeLabel: "\u9a8c\u8bc1\u7801",
+    registerCodeAction: "\u53d1\u9001\u9a8c\u8bc1\u7801",
+    registerCodeSending: "\u53d1\u9001\u4e2d...",
+    registerCodeSent: "\u9a8c\u8bc1\u7801\u5df2\u53d1\u9001\uff0c\u8bf7\u67e5\u6536\u90ae\u7bb1\u3002",
     loginPassword: "\u5bc6\u7801\uff08\u81f3\u5c11 6 \u4f4d\uff09",
     loginFailed: "\u767b\u5f55\u5931\u8d25\uff1a{error}",
     loginSuccess: "\u767b\u5f55\u6210\u529f\u3002",
@@ -213,8 +265,37 @@ const copy = {
     profileMemberSince: "\u5f53\u524d\u767b\u5f55\u8d26\u53f7",
     profileEmail: "\u90ae\u7bb1",
     profileSkillStatus: "\u72b6\u6001",
+    profileEditSkill: "\u7f16\u8f91 skill",
+    profileEditTitle: "\u7f16\u8f91\u5df2\u63d0\u4ea4\u7684 skill",
+    profilePickSkill: "\u4ece\u4f60\u5df2\u63d0\u4ea4\u7684 skill \u4e2d\u9009\u4e00\u4e2a\u8fdb\u884c\u7f16\u8f91\u3002",
     profileReviewFor: "\u5bf9\u5e94 skill",
     profileReviewCount: "\u603b\u8bc4\u5206\u6570",
+    submitTitle: "\u63d0\u4ea4\u65b0 skill",
+    submitIntro: "\u5206\u4eab\u4e00\u4e2a\u65b0 skill\uff0c\u4ea4\u7531\u7ba1\u7406\u5458\u5ba1\u6838\u540e\u51b3\u5b9a\u662f\u5426\u516c\u5f00\u5230 marketplace\u3002",
+    mySkillsTitle: "\u6211\u7684 skills",
+    mySkillsIntro: "\u67e5\u770b\u3001\u4fee\u6539\u4f60\u5df2\u63d0\u4ea4\u7684 skill\uff0c\u6216\u8005\u518d\u63d0\u4ea4\u4e00\u4e2a\u65b0 skill\u3002",
+    mySkillsEmpty: "\u4f60\u8fd8\u6ca1\u6709\u63d0\u4ea4\u8fc7 skill\u3002",
+    mySkillsCreate: "\u63d0\u4ea4 Skill",
+    mySkillsEdit: "\u7f16\u8f91",
+    mySkillsCancel: "\u53d6\u6d88",
+    submitRequiredMark: "*",
+    submitRequiredHint: "* \u4e3a\u5fc5\u586b\u9879",
+    submitMissingFields: "\u8bf7\u8865\u5145\u5fc5\u586b\u9879\uff1a{fields}",
+    submitName: "\u540d\u79f0",
+    submitCategory: "\u5206\u7c7b",
+    submitDescription: "\u63cf\u8ff0",
+    submitFunctions: "\u529f\u80fd",
+    submitInvocationMethod: "\u8c03\u7528\u65b9\u5f0f",
+    submitPrice: "\u5355\u6b21\u4ef7\u683c",
+    submitSource: "\u6765\u6e90",
+    submitSourceUrl: "\u6587\u6863 URL",
+    submitSourceAuthor: "\u63d0\u4f9b\u65b9",
+    submitLicense: "\u8bb8\u53ef",
+    submitOperatingSystem: "\u8fd0\u884c\u73af\u5883",
+    submitSave: "\u63d0\u4ea4 skill",
+    submitUpdate: "\u4fdd\u5b58\u4fee\u6539",
+    submitSuccess: "Skill \u5df2\u63d0\u4ea4\uff0c\u7b49\u5f85\u5ba1\u6838\u3002",
+    submitUpdateSuccess: "\u4f60\u63d0\u4ea4\u7684 skill \u5df2\u66f4\u65b0\uff0c\u5e76\u91cd\u65b0\u8fdb\u5165\u5ba1\u6838\u3002",
     welcomeTitle: "\u4f60\u7684 Agent \u5e94\u8be5\u5982\u4f55\u4f7f\u7528 Nexra",
     welcomeSteps: "\u5173\u952e\u6b65\u9aa4",
     welcomeCapabilities: "Nexra \u63d0\u4f9b\u7684\u80fd\u529b",
@@ -270,6 +351,7 @@ const copy = {
     marketplaceHideTemplates: "\u6392\u9664\u6a21\u677f",
     marketplaceUser: "\u7528\u6237",
     marketplaceAgent: "\u7cfb\u7edf",
+    noRating: "\u6682\u65e0\u8bc4\u5206",
     marketplaceOpenDetail: "\u67e5\u770b\u8be6\u60c5",
     marketplaceFunction: "\u529f\u80fd",
     marketplaceInvocation: "\u8c03\u7528\u65b9\u5f0f",
@@ -318,10 +400,17 @@ const copy = {
     skillChooseStar: "\u8bf7\u5148\u9009\u62e9\u661f\u7ea7\u8bc4\u5206\u3002",
     skillSaved: "\u7528\u6237\u8bc4\u5206\u5df2\u4fdd\u5b58\uff0c\u4fe1\u4efb\u5206\u5df2\u66f4\u65b0\u3002",
     adminPendingTitle: "\u5f85\u5ba1\u6838 skill",
+    adminApprovedTitle: "\u5df2\u6279\u51c6 skills",
+    adminRejectedTitle: "\u5df2\u62d2\u7edd skills",
     adminSelectedTitle: "\u5ba1\u6838\u4e0e\u7ef4\u62a4",
     adminEmpty: "\u5f53\u524d\u6ca1\u6709\u5f85\u5ba1\u6838\u7684 skill\u3002",
+    adminApprovedEmpty: "\u8fd8\u6ca1\u6709\u5df2\u6279\u51c6\u7684 skill\u3002",
+    adminRejectedEmpty: "\u8fd8\u6ca1\u6709\u5df2\u62d2\u7edd\u7684 skill\u3002",
     adminPick: "\u8bf7\u5148\u9009\u62e9\u4e00\u4e2a\u5f85\u5ba1\u6838 skill \u8fdb\u884c\u5904\u7406\u3002",
     adminApprove: "\u6279\u51c6 skill",
+    adminReject: "\u62d2\u7edd skill",
+    adminPublish: "\u4e0a\u67b6",
+    adminUnpublish: "\u4e0b\u67b6",
     adminDelete: "\u5220\u9664 skill",
     adminSave: "\u4fdd\u5b58\u4fee\u6539",
     adminFunctions: "\u529f\u80fd\u5217\u8868",
@@ -340,16 +429,23 @@ const copy = {
     adminUserRatingAvg: "\u7528\u6237\u8bc4\u5206\u5747\u503c",
     adminUserRatingCount: "\u7528\u6237\u8bc4\u5206\u6570",
     adminApproved: "Skill \u5df2\u6279\u51c6\u3002",
+    adminRejected: "Skill \u5df2\u62d2\u7edd\u3002",
+    adminPublished: "Skill \u5df2\u4e0a\u67b6\u3002",
+    adminUnpublished: "Skill \u5df2\u4e0b\u67b6\u3002",
     adminSaved: "Skill \u4fee\u6539\u5df2\u4fdd\u5b58\u3002",
     adminDeleted: "Skill \u5df2\u5220\u9664\u3002",
     adminNeedRole: "\u8bf7\u5207\u6362\u5230\u7ba1\u7406\u5458\u8d26\u53f7\u540e\u518d\u8fdb\u884c\u5ba1\u6838\u7ba1\u7406\u3002",
+    adminSearchPlaceholder: "\u641c\u7d22 skill \u540d\u79f0\u3001\u5206\u7c7b\u3001\u63d0\u4f9b\u65b9\u6216\u5ba1\u6838\u4eba",
+    adminPageSize: "\u6bcf\u9875\u6570\u91cf",
+    adminPage: "\u9875\u7801",
+    adminTotal: "\u603b\u6570",
     errorsTitle: "\u5e38\u89c1\u9519\u8bef",
     error1: "\u540e\u7aef\u672a\u542f\u52a8\uff1a\u5148\u542f\u52a8 Nexra\uff0c\u5e76\u786e\u8ba4 {apiBase}/api/dashboard \u80fd\u8fd4\u56de\u6570\u636e\u3002",
     error2: "\u6280\u80fd\u4e0d\u5b58\u5728\uff1a\u4f60\u7684 agent \u8bf7\u6c42\u4e86\u65e0\u6548\u7684 skill id\u3002",
     error3: "\u53c2\u6570\u6821\u9a8c\u5931\u8d25\uff1a\u63d0\u4ea4\u8bc4\u4ef7\u65f6\u5fc5\u987b\u5e26 author\uff0crating \u5fc5\u987b\u5728 1 \u5230 5 \u4e4b\u95f4\u3002",
     error4: "\u8fde\u63a5\u88ab\u62d2\u7edd\uff1a\u4f60\u7684 agent \u65e0\u6cd5\u8bbf\u95ee\u672c\u5730 Nexra API \u5730\u5740\u3002",
-    connected: "\u524d\u7aef\u5df2\u8fde\u63a5\u5230 Spring Boot API\uff1a{apiBase}/api \u3002",
-    failed: "\u65e0\u6cd5\u8fde\u63a5\u540e\u7aef\uff1a{error}\u3002\u8bf7\u5148\u542f\u52a8 Spring Boot \u670d\u52a1\u3002"
+    connected: "\u524d\u7aef\u5df2\u8fde\u63a5\u5230 Python API\uff1a{apiBase}/api \u3002",
+    failed: "\u65e0\u6cd5\u8fde\u63a5\u540e\u7aef\uff1a{error}\u3002\u8bf7\u5148\u542f\u52a8 Python \u540e\u7aef\u670d\u52a1\u3002"
   }
 };
 
@@ -357,6 +453,7 @@ const state = {
   selectedView: "welcome",
   selectedSkillId: null,
   adminSelectedSkillId: null,
+  profileEditingSkillId: null,
   selectedRating: 0,
   language: "en",
   authMode: "login",
@@ -373,9 +470,17 @@ const state = {
   marketplaceDraft: { q: "", functionName: "", readiness: "all", hideTemplates: false },
   skillDetail: null,
   pendingSkills: [],
+  adminSkills: [],
+  adminList: { items: [], page: 0, pageSize: 10, totalItems: 0, totalPages: 0, status: "PENDING", q: "" },
+  adminDrafts: {
+    PENDING: { q: "", pageSize: 10 },
+    APPROVED: { q: "", pageSize: 10 },
+    REJECTED: { q: "", pageSize: 10 }
+  },
   billingSummary: null,
   transactions: [],
-  apiKeys: []
+  apiKeys: [],
+  submitMode: "list"
 };
 
 const heroTitle = document.querySelector("#hero-title");
@@ -398,6 +503,10 @@ const loginForm = document.querySelector("#login-form");
 const loginNameLabel = document.querySelector("#login-name-label");
 const loginNameInput = document.querySelector("#login-name");
 const loginUsernameLabel = document.querySelector("#login-username-label");
+const registerCodeLabel = document.querySelector("#register-code-label");
+const registerCodeRow = document.querySelector("#register-code-row");
+const registerCodeInput = document.querySelector("#register-code");
+const sendCodeButton = document.querySelector("#send-code-btn");
 const loginPasswordLabel = document.querySelector("#login-password-label");
 const loginSubmit = document.querySelector("#login-submit");
 const loginEmailInput = document.querySelector("#login-username");
@@ -432,11 +541,52 @@ function displayStatus(status) {
   const map = {
     ACTIVE: state.language === "zh" ? "\u6d3b\u8dc3" : "Active",
     active: state.language === "zh" ? "\u6d3b\u8dc3" : "Active",
+    DRAFT: state.language === "zh" ? "\u8349\u7a3f" : "Draft",
+    draft: state.language === "zh" ? "\u8349\u7a3f" : "Draft",
+    REVOKED: state.language === "zh" ? "\u5df2\u4e0b\u67b6" : "Revoked",
+    revoked: state.language === "zh" ? "\u5df2\u4e0b\u67b6" : "Revoked",
     PENDING: state.language === "zh" ? "\u5f85\u5ba1\u6838" : "Pending",
+    pending: state.language === "zh" ? "\u5f85\u5ba1\u6838" : "Pending",
     APPROVED: state.language === "zh" ? "\u5df2\u6279\u51c6" : "Approved",
-    REJECTED: state.language === "zh" ? "\u5df2\u62d2\u7edd" : "Rejected"
+    approved: state.language === "zh" ? "\u5df2\u6279\u51c6" : "Approved",
+    REJECTED: state.language === "zh" ? "\u5df2\u62d2\u7edd" : "Rejected",
+    rejected: state.language === "zh" ? "\u5df2\u62d2\u7edd" : "Rejected",
+    REPUBLISHED: state.language === "zh" ? "\u91cd\u65b0\u4e0a\u67b6" : "Republished",
+    UNPUBLISHED: state.language === "zh" ? "\u5df2\u4e0b\u67b6" : "Unpublished"
   };
   return map[status] ?? status;
+}
+
+function formatFiveStarRating(skill) {
+  if (!skill?.hasUserRating) {
+    return tr().noRating;
+  }
+  return `${safeNumber(skill.userRatingAvg, 0).toFixed(1)}/5`;
+}
+
+function formatHundredScore(value) {
+  if (!Number.isFinite(Number(value))) {
+    return tr().noRating;
+  }
+  return `${Number(value)}/100`;
+}
+
+function formatSystemRating(skill) {
+  if (!skill?.hasSystemRating) {
+    return tr().noRating;
+  }
+  return formatHundredScore(skill.systemScore ?? skill.agentScore);
+}
+
+function currentAdminStatus() {
+  return state.adminList?.status || "PENDING";
+}
+
+function syncAdminDraftState() {
+  const status = currentAdminStatus();
+  const draft = state.adminDrafts[status] || { q: "", pageSize: 10 };
+  state.adminList.q = draft.q;
+  state.adminList.pageSize = draft.pageSize;
 }
 
 function displayRecommendationSummary(summary) {
@@ -551,7 +701,11 @@ function clearAuthState() {
   state.currentUser = null;
   state.userProfile = null;
   state.pendingSkills = [];
+  state.adminSkills = [];
+  state.adminList = { items: [], page: 0, pageSize: 10, totalItems: 0, totalPages: 0, status: "PENDING", q: "" };
   state.adminSelectedSkillId = null;
+  state.profileEditingSkillId = null;
+  state.submitMode = "list";
   window.localStorage.removeItem("nexra-auth-token");
 }
 
@@ -648,6 +802,12 @@ function setView(view) {
   if (view === "profile" && !currentUser()) {
     view = "welcome";
   }
+  if (view === "submit" && !currentUser()) {
+    view = "welcome";
+  }
+  if (view === "skill" && !currentUser()) {
+    view = "marketplace";
+  }
   state.selectedView = view;
   document.querySelectorAll(".view").forEach((section) => {
     section.classList.toggle("active", section.id === `${view}-view`);
@@ -667,6 +827,8 @@ function updateLanguageUi() {
   authRegisterTab.textContent = tr().authRegisterTab;
   loginNameLabel.textContent = tr().loginName;
   loginUsernameLabel.textContent = tr().loginUsername;
+  registerCodeLabel.textContent = tr().registerCodeLabel;
+  sendCodeButton.textContent = tr().registerCodeAction;
   loginPasswordLabel.textContent = tr().loginPassword;
   loginSubmit.textContent = state.authMode === "register" ? tr().registerAction : tr().loginAction;
   renderAuthFeedback();
@@ -678,7 +840,10 @@ function renderAuthMode() {
   authRegisterTab.classList.toggle("active", isRegister);
   loginNameLabel.classList.toggle("hidden", !isRegister);
   loginNameInput.classList.toggle("hidden", !isRegister);
+  registerCodeLabel.classList.toggle("hidden", !isRegister);
+  registerCodeRow.classList.toggle("hidden", !isRegister);
   loginNameInput.required = isRegister;
+  registerCodeInput.required = isRegister;
   loginEmailInput.autocomplete = isRegister ? "email" : "username";
   loginCopy.textContent = isRegister ? tr().loginRegisterCopy : tr().loginCopy;
   authPill.textContent = isRegister ? tr().authRegisterPill : tr().authLoginPill;
@@ -687,8 +852,10 @@ function renderAuthMode() {
 }
 
 function allowedViews() {
-  const views = ["welcome", "tutorial", "dashboard", "marketplace", "skill"];
+  const views = ["welcome", "tutorial", "dashboard", "marketplace"];
   if (currentUser()) {
+    views.push("submit");
+    views.push("skill");
     views.push("profile");
   }
   if (isAdmin()) {
@@ -733,19 +900,23 @@ function signIn(token, user, hideModal = true) {
 }
 
 async function signOut() {
+  const logoutHeaders = state.authToken ? authHeaders() : null;
   if (state.authToken) {
-    try {
-      await api("/auth/logout", { method: "POST", headers: authHeaders() });
-    } catch (error) {
-      console.warn(error);
-    }
+    setTimeout(() => {
+      fetch(`${API_BASE}/auth/logout`, {
+        method: "POST",
+        headers: logoutHeaders || {}
+      }).catch((error) => {
+        console.warn(error);
+      });
+    }, 0);
   }
   clearAuthState();
   setView("welcome");
   renderSessionControls();
   renderNavigation();
   setBanner(tr().logoutSuccess, "success");
-  showLoginModal();
+  rerenderViews();
 }
 
 function renderLoginModal() {
@@ -1024,6 +1195,7 @@ function renderDashboard() {
 function renderMarketplace() {
   const view = document.querySelector("#marketplace-view");
   view.innerHTML = "";
+  const guestMode = !currentUser();
   const visibleSkills = state.skills
     .sort((left, right) => {
       const leftReadiness = deriveReadiness(left);
@@ -1036,22 +1208,23 @@ function renderMarketplace() {
   const controls = document.createElement("div");
   controls.className = "toolbar-row";
   controls.innerHTML = `
-    <input id="skill-search-input" type="search" value="${state.marketplaceDraft.q}" placeholder="${tr().marketplaceSearchPlaceholder}" />
-    <input id="skill-function-input" type="search" value="${state.marketplaceDraft.functionName}" placeholder="${tr().marketplaceFunction}" />
-    <select id="skill-readiness-select">
+    <input id="skill-search-input" type="search" value="${state.marketplaceDraft.q}" placeholder="${tr().marketplaceSearchPlaceholder}" ${guestMode ? "disabled" : ""} />
+    <input id="skill-function-input" type="search" value="${state.marketplaceDraft.functionName}" placeholder="${tr().marketplaceFunction}" ${guestMode ? "disabled" : ""} />
+    <select id="skill-readiness-select" ${guestMode ? "disabled" : ""}>
       <option value="all" ${state.marketplaceDraft.readiness === "all" ? "selected" : ""}>${tr().marketplaceAllReadiness}</option>
       <option value="ready" ${state.marketplaceDraft.readiness === "ready" ? "selected" : ""}>${tr().readinessReady}</option>
       <option value="credentials" ${state.marketplaceDraft.readiness === "credentials" ? "selected" : ""}>${tr().readinessCreds}</option>
       <option value="local" ${state.marketplaceDraft.readiness === "local" ? "selected" : ""}>${tr().readinessLocal}</option>
       <option value="template" ${state.marketplaceDraft.readiness === "template" ? "selected" : ""}>${tr().readinessTemplate}</option>
     </select>
-    <label class="inline-check"><input id="skill-hide-templates" type="checkbox" ${state.marketplaceDraft.hideTemplates ? "checked" : ""} /> ${tr().marketplaceHideTemplates}</label>
-    <button id="skill-search-btn" class="primary-btn" type="button">${tr().marketplaceSearchButton}</button>
+    <label class="inline-check"><input id="skill-hide-templates" type="checkbox" ${state.marketplaceDraft.hideTemplates ? "checked" : ""} ${guestMode ? "disabled" : ""} /> ${tr().marketplaceHideTemplates}</label>
+    <button id="skill-search-btn" class="primary-btn" type="button" ${guestMode ? "disabled" : ""}>${tr().marketplaceSearchButton}</button>
     <select id="skill-page-size-select">
       <option value="3" ${state.skillsPage.pageSize === 3 ? "selected" : ""}>${tr().marketplacePageSize}: 3</option>
       <option value="6" ${state.skillsPage.pageSize === 6 ? "selected" : ""}>${tr().marketplacePageSize}: 6</option>
       <option value="9" ${state.skillsPage.pageSize === 9 ? "selected" : ""}>${tr().marketplacePageSize}: 9</option>
     </select>
+    ${guestMode ? `<div class="marketplace-guest-note">${tr().loginCopy}</div>` : ""}
   `;
 
   const list = document.createElement("div");
@@ -1088,9 +1261,9 @@ function renderMarketplace() {
         </div>
       </div>
       <p>${skill.description}</p>
-      <div class="skill-stats"><span>${tr().marketplaceRecommendation}: <strong>${skill.recommendationScore}/100</strong></span><span>${currency(skill.pricePerCall)}/call</span></div>
-      <div class="skill-stats"><span>${tr().marketplaceOverallTrust}: <strong>${skill.overallTrust}/100</strong></span><span>${tr().skillCapabilityMatch}: ${skill.matchScore}/100</span></div>
-      <div class="skill-stats"><span>${tr().marketplaceUser}: ${skill.userRatingAvg.toFixed(1)}/5</span><span>${tr().marketplaceAgent}: ${skill.systemScore}/100</span></div>
+      <div class="skill-stats"><span>${tr().marketplaceRecommendation}: <strong>${formatHundredScore(skill.recommendationScore)}</strong></span><span>${currency(skill.pricePerCall)}/call</span></div>
+      <div class="skill-stats"><span>${tr().marketplaceOverallTrust}: <strong>${formatHundredScore(skill.overallTrust)}</strong></span><span>${tr().skillCapabilityMatch}: ${skill.matchScore}/100</span></div>
+      <div class="skill-stats"><span>${tr().marketplaceUser}: ${formatFiveStarRating(skill)}</span><span>${tr().marketplaceAgent}: ${formatSystemRating(skill)}</span></div>
       <div class="skill-stats"><span>${tr().marketplaceFunction}: ${skill.functions.join(", ")}</span></div>
       <div class="skill-stats"><span>${tr().marketplaceInvocation}: ${skill.invocationMethod}</span></div>
       <div class="skill-stats"><span>${tr().marketplaceProvider}: ${skill.providerName || skill.submittedBy}</span><span>${tr().marketplaceDocs}: ${skill.apiDocsUrl ? "Ready" : "--"}</span></div>
@@ -1103,6 +1276,10 @@ function renderMarketplace() {
 
   list.querySelectorAll("button[data-skill-id]").forEach((button) => {
     button.addEventListener("click", async () => {
+      if (!currentUser()) {
+        showLoginModal();
+        return;
+      }
       state.selectedSkillId = button.dataset.skillId;
       await loadSkillDetail();
       setView("skill");
@@ -1114,6 +1291,10 @@ function renderMarketplace() {
   const readinessSelect = controls.querySelector("#skill-readiness-select");
   const hideTemplatesInput = controls.querySelector("#skill-hide-templates");
   const runSearch = async () => {
+    if (!currentUser()) {
+      showLoginModal();
+      return;
+    }
     state.skillsPage.q = state.marketplaceDraft.q.trim();
     state.skillsPage.functionName = state.marketplaceDraft.functionName.trim();
     state.skillsPage.readiness = state.marketplaceDraft.readiness;
@@ -1168,6 +1349,194 @@ function renderMarketplace() {
   });
 }
 
+function skillFormMarkup(skill, actionLabel) {
+  const functionsValue = Array.isArray(skill?.functions) ? skill.functions.join(", ") : "";
+  const requiredMark = `<span class="required-mark">${tr().submitRequiredMark}</span>`;
+  return `
+    <form class="form-grid skill-submit-form">
+      <p class="helper-text">${tr().submitRequiredHint}</p>
+      <div class="auth-feedback hidden submit-form-feedback"></div>
+      <label>${tr().submitName} ${requiredMark}<input name="name" required value="${escapeHtml(skill?.name || "")}" /></label>
+      <label>${tr().submitCategory} ${requiredMark}<input name="category" required value="${escapeHtml(skill?.category || "")}" /></label>
+      <label>${tr().submitDescription} ${requiredMark}<textarea name="description" rows="4" required>${escapeHtml(skill?.description || "")}</textarea></label>
+      <label>${tr().submitFunctions} ${requiredMark}<input name="functions" required value="${escapeHtml(functionsValue)}" placeholder="search, summarization, writing" /></label>
+      <label>${tr().submitInvocationMethod} ${requiredMark}<input name="invocationMethod" required value="${escapeHtml(skill?.invocationMethod || "")}" /></label>
+      <div class="two-grid">
+        <label>${tr().submitPrice}<input name="pricePerCall" type="number" step="0.01" value="${Number(skill?.pricePerCall || 0)}" /></label>
+        <label>${tr().submitOperatingSystem}<input name="operatingSystem" value="${escapeHtml(skill?.operatingSystem || "")}" /></label>
+      </div>
+      <div class="two-grid">
+        <label>${tr().submitSource}<input name="source" value="${escapeHtml(skill?.source || "manual")}" /></label>
+        <label>${tr().submitSourceAuthor}<input name="sourceAuthor" value="${escapeHtml(skill?.sourceAuthor || currentUser()?.name || "")}" /></label>
+      </div>
+      <div class="two-grid">
+        <label>${tr().submitSourceUrl}<input name="sourceUrl" value="${escapeHtml(skill?.sourceUrl || "")}" /></label>
+        <label>${tr().submitLicense}<input name="license" value="${escapeHtml(skill?.license || "Unknown")}" /></label>
+      </div>
+      <button class="primary-btn" type="submit">${actionLabel}</button>
+    </form>
+  `;
+}
+
+function skillPayloadFromForm(form) {
+  const data = new FormData(form);
+  return {
+    name: data.get("name"),
+    category: data.get("category"),
+    description: data.get("description"),
+    functions: String(data.get("functions") || "").split(",").map((item) => item.trim()).filter(Boolean),
+    invocationMethod: data.get("invocationMethod"),
+    pricePerCall: Number(data.get("pricePerCall") || 0),
+    source: data.get("source"),
+    sourceUrl: data.get("sourceUrl"),
+    sourceAuthor: data.get("sourceAuthor"),
+    license: data.get("license"),
+    operatingSystem: data.get("operatingSystem")
+  };
+}
+
+function validateSkillPayload(payload) {
+  const missing = [];
+  if (!String(payload.name || "").trim()) missing.push(tr().submitName);
+  if (!String(payload.category || "").trim()) missing.push(tr().submitCategory);
+  if (!String(payload.description || "").trim()) missing.push(tr().submitDescription);
+  if (!Array.isArray(payload.functions) || !payload.functions.length) missing.push(tr().submitFunctions);
+  if (!String(payload.invocationMethod || "").trim()) missing.push(tr().submitInvocationMethod);
+  return missing;
+}
+
+function renderInlineFormFeedback(container, message, type = "error") {
+  if (!container) return;
+  if (!message) {
+    container.className = "auth-feedback hidden submit-form-feedback";
+    container.textContent = "";
+    return;
+  }
+  container.className = `auth-feedback ${type} submit-form-feedback`;
+  container.textContent = message;
+}
+
+function renderSubmitView() {
+  const view = document.querySelector("#submit-view");
+  view.innerHTML = "";
+  if (!currentUser()) {
+    view.innerHTML = `<article class="panel"><p>${tr().loginCopy}</p><button id="submit-login-btn" class="primary-btn" type="button">${tr().loginAction}</button></article>`;
+    view.querySelector("#submit-login-btn").addEventListener("click", showLoginModal);
+    return;
+  }
+  const submittedSkills = Array.isArray(state.userProfile?.submittedSkills) ? state.userProfile.submittedSkills : [];
+  const editingSkill = submittedSkills.find((skill) => skill.id === state.profileEditingSkillId) || null;
+  const isCreateMode = state.submitMode === "create";
+  const isEditMode = state.submitMode === "edit" && editingSkill;
+  view.innerHTML = `
+    <article class="panel">
+      <div class="section-title"><h3>${tr().mySkillsTitle}</h3><span class="pill">${tr().nav.submit}</span></div>
+      <p>${tr().mySkillsIntro}</p>
+      <div class="admin-actions" style="margin-top:12px;">
+        <button id="submit-new-skill-btn" class="primary-btn" type="button">${tr().mySkillsCreate}</button>
+        ${(isCreateMode || isEditMode) ? `<button id="submit-cancel-btn" class="secondary-btn" type="button">${tr().mySkillsCancel}</button>` : "" }
+      </div>
+    </article>
+    <div class="two-grid" style="margin-top:18px;">
+      <article class="panel">
+        <div class="section-title"><h3>${tr().profileSubmittedSkills}</h3><span class="pill">${submittedSkills.length}</span></div>
+        <div id="submit-skill-list" class="admin-list"></div>
+      </article>
+      <article class="panel">
+        <div class="section-title"><h3>${isEditMode ? tr().profileEditTitle : tr().submitTitle}</h3><span class="pill">${isEditMode ? tr().mySkillsEdit : tr().mySkillsCreate}</span></div>
+        <div id="submit-editor"></div>
+      </article>
+    </div>
+  `;
+
+  const list = view.querySelector("#submit-skill-list");
+  if (!submittedSkills.length) {
+    list.innerHTML = `<p class="helper-text">${tr().mySkillsEmpty}</p>`;
+  } else {
+    submittedSkills.forEach((skill) => {
+      const card = document.createElement("article");
+      card.className = "review-card";
+      card.innerHTML = `
+        <div class="row-between">
+          <strong>${skill.name}</strong>
+          <span class="pill">${displayStatus(skill.approvalStatus)}</span>
+        </div>
+        <p>${skill.description}</p>
+        <small>${tr().profileSkillStatus}: ${displayStatus(skill.status)}</small>
+        <div class="admin-actions" style="margin-top:10px;"><button class="secondary-btn" type="button" data-edit-skill="${skill.id}">${tr().mySkillsEdit}</button></div>
+      `;
+      list.appendChild(card);
+    });
+  }
+
+  list.querySelectorAll("[data-edit-skill]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.profileEditingSkillId = button.dataset.editSkill;
+      state.submitMode = "edit";
+      renderSubmitView();
+    });
+  });
+
+  const editor = view.querySelector("#submit-editor");
+  if (isCreateMode || isEditMode) {
+    editor.innerHTML = `
+      <p class="helper-text">${isEditMode ? tr().profilePickSkill : tr().submitIntro}</p>
+      ${skillFormMarkup(isEditMode ? editingSkill : null, isEditMode ? tr().submitUpdate : tr().submitSave)}
+    `;
+    const form = editor.querySelector(".skill-submit-form");
+    const feedback = editor.querySelector(".submit-form-feedback");
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      renderInlineFormFeedback(feedback, "");
+      const payload = skillPayloadFromForm(event.currentTarget);
+      const missingFields = validateSkillPayload(payload);
+      if (missingFields.length) {
+        renderInlineFormFeedback(
+          feedback,
+          tr().submitMissingFields.replace("{fields}", missingFields.join(state.language === "zh" ? "、" : ", "))
+        );
+        event.currentTarget.reportValidity();
+        return;
+      }
+      if (isEditMode && editingSkill) {
+        await api(`/skills/submissions/${editingSkill.id}`, {
+          method: "PUT",
+          headers: authHeaders(),
+          body: JSON.stringify(payload)
+        });
+        showToast(tr().submitUpdateSuccess);
+      } else {
+        await api("/skills/submissions", {
+          method: "POST",
+          headers: authHeaders(),
+          body: JSON.stringify(payload)
+        });
+        showToast(tr().submitSuccess);
+      }
+      state.profileEditingSkillId = null;
+      state.submitMode = "list";
+      await refreshData(false);
+      renderSubmitView();
+    });
+  } else {
+    editor.innerHTML = `<p class="helper-text">${tr().profilePickSkill}</p>`;
+  }
+
+  view.querySelector("#submit-new-skill-btn").addEventListener("click", () => {
+    state.submitMode = "create";
+    state.profileEditingSkillId = null;
+    renderSubmitView();
+  });
+  const cancelButton = view.querySelector("#submit-cancel-btn");
+  if (cancelButton) {
+    cancelButton.addEventListener("click", () => {
+      state.submitMode = "list";
+      state.profileEditingSkillId = null;
+      renderSubmitView();
+    });
+  }
+}
+
 function renderSkillDetail() {
   const view = document.querySelector("#skill-view");
   const detail = state.skillDetail;
@@ -1175,6 +1544,10 @@ function renderSkillDetail() {
   if (!detail) return;
   const skill = detail.skill;
   const readiness = deriveReadiness(skill);
+  const overallTrustLabel = formatHundredScore(skill.overallTrust);
+  const systemRatingLabel = formatSystemRating(skill);
+  const userRatingLabel = formatFiveStarRating(skill);
+  const normalizedUserLabel = Number.isFinite(Number(skill.normalizedUserRating)) ? `${skill.normalizedUserRating}/100` : tr().noRating;
 
   view.innerHTML = `
     <div class="detail-layout">
@@ -1191,13 +1564,13 @@ function renderSkillDetail() {
         </div>
         <p>${skill.description}</p>
         <div class="score-stack">
-          <div class="score-ring" style="--score:${skill.overallTrust}"><strong>${skill.overallTrust}</strong></div>
+          <div class="score-ring" style="--score:${safeNumber(skill.overallTrust, 0)}"><strong>${Number.isFinite(Number(skill.overallTrust)) ? skill.overallTrust : "--"}</strong></div>
           <div class="score-list">
             <div><span>${tr().skillRecommendation}</span><span>${skill.recommendationScore}/100</span></div>
             <div><span>${tr().skillCapabilityMatch}</span><span>${skill.matchScore}/100</span></div>
-            <div><span>${tr().skillOverallTrust}</span><span>${skill.overallTrust}/100</span></div>
-            <div><span>${tr().skillUserRating}</span><span>${skill.userRatingAvg.toFixed(1)}/5 (${skill.normalizedUserRating}/100)</span></div>
-            <div><span>${tr().skillAgentRating}</span><span>${skill.agentScore}/100</span></div>
+            <div><span>${tr().skillOverallTrust}</span><span>${overallTrustLabel}</span></div>
+            <div><span>${tr().skillUserRating}</span><span>${skill.hasUserRating ? `${userRatingLabel} (${normalizedUserLabel})` : tr().noRating}</span></div>
+            <div><span>${tr().skillAgentRating}</span><span>${systemRatingLabel}</span></div>
             <div><span>${tr().skillPricePerCall}</span><span>${currency(skill.pricePerCall)}</span></div>
           </div>
         </div>
@@ -1215,15 +1588,15 @@ function renderSkillDetail() {
         <div class="two-grid">
           <article class="panel">
             <div class="section-title"><h3>${tr().skillUserRating}</h3><span class="pill">${skill.userRatingCount} ${tr().skillReviews}</span></div>
-            <div class="inline-stat"><span>${tr().skillAverageScore}</span><strong>${skill.userRatingAvg.toFixed(1)}/5</strong></div>
-            <div class="inline-stat"><span>${tr().skillNormalizedScore}</span><strong>${skill.normalizedUserRating}/100</strong></div>
+            <div class="inline-stat"><span>${tr().skillAverageScore}</span><strong>${userRatingLabel}</strong></div>
+            <div class="inline-stat"><span>${tr().skillNormalizedScore}</span><strong>${normalizedUserLabel}</strong></div>
             <div class="inline-stat"><span>${tr().skillIntent}</span><strong>${tr().skillHumanUsefulness}</strong></div>
           </article>
           <article class="panel">
             <div class="section-title"><h3>${tr().skillAgentRating}</h3><span class="pill">${tr().dashboardAutoEvaluated}</span></div>
-            <div class="inline-stat"><span>${tr().skillSuccessRate}</span><strong>${skill.successRate}%</strong></div>
-            <div class="inline-stat"><span>${tr().skillLatencyP95}</span><strong>${skill.latencyP95} ms</strong></div>
-            <div class="inline-stat"><span>${tr().skillCostEfficiency}</span><strong>${skill.costEfficiency}/100</strong></div>
+            <div class="inline-stat"><span>${tr().skillSuccessRate}</span><strong>${skill.hasSystemRating ? `${skill.successRate}%` : tr().noRating}</strong></div>
+            <div class="inline-stat"><span>${tr().skillLatencyP95}</span><strong>${skill.hasSystemRating ? `${skill.latencyP95} ms` : tr().noRating}</strong></div>
+            <div class="inline-stat"><span>${tr().skillCostEfficiency}</span><strong>${skill.hasSystemRating ? `${skill.costEfficiency}/100` : tr().noRating}</strong></div>
           </article>
         </div>
         <article class="panel" style="margin-top:18px;">
@@ -1312,7 +1685,8 @@ function renderProfile() {
   const profile = state.userProfile;
   const user = currentUser();
   if (!user) {
-    view.innerHTML = `<article class="panel"><p>${tr().loginCopy}</p></article>`;
+    view.innerHTML = `<article class="panel"><p>${tr().loginCopy}</p><button id="profile-login-btn" class="primary-btn" type="button">${tr().loginAction}</button></article>`;
+    view.querySelector("#profile-login-btn").addEventListener("click", showLoginModal);
     return;
   }
   if (!profile) {
@@ -1387,6 +1761,15 @@ function renderAdmin() {
   const view = document.querySelector("#admin-view");
   view.innerHTML = "";
 
+  if (!currentUser()) {
+    const panel = document.createElement("article");
+    panel.className = "panel";
+    panel.innerHTML = `<p>${tr().loginCopy}</p><button id="admin-login-btn" class="primary-btn" type="button">${tr().loginAction}</button>`;
+    view.appendChild(panel);
+    view.querySelector("#admin-login-btn").addEventListener("click", showLoginModal);
+    return;
+  }
+
   if (!isAdmin()) {
     const panel = document.createElement("article");
     panel.className = "panel";
@@ -1395,8 +1778,11 @@ function renderAdmin() {
     return;
   }
 
-  const manageableSkills = [...state.pendingSkills, ...state.skills.filter((skill) => !state.pendingSkills.some((pending) => pending.id === skill.id))];
-  const selected = manageableSkills.find((skill) => skill.id === state.adminSelectedSkillId) ?? manageableSkills[0] ?? null;
+  const status = currentAdminStatus();
+  const listTitle = status === "APPROVED" ? tr().adminApprovedTitle : status === "REJECTED" ? tr().adminRejectedTitle : tr().adminPendingTitle;
+  const emptyCopy = status === "APPROVED" ? tr().adminApprovedEmpty : status === "REJECTED" ? tr().adminRejectedEmpty : tr().adminEmpty;
+  const filteredSkills = Array.isArray(state.adminSkills) ? state.adminSkills : [];
+  const selected = filteredSkills.find((skill) => skill.id === state.adminSelectedSkillId) ?? filteredSkills[0] ?? null;
   if (selected && !state.adminSelectedSkillId) {
     state.adminSelectedSkillId = selected.id;
   }
@@ -1405,8 +1791,30 @@ function renderAdmin() {
   wrapper.className = "admin-grid";
   wrapper.innerHTML = `
     <article class="panel">
-      <div class="section-title"><h3>${tr().adminPendingTitle}</h3><span class="pill">${tr().adminOnly}</span></div>
-      <div class="admin-list" id="admin-pending-list"></div>
+      <div class="filter-row" style="margin-bottom:14px;">
+        <div class="admin-actions">
+          <button class="secondary-btn ${status === "PENDING" ? "active" : ""}" type="button" data-admin-status="PENDING">${tr().adminPendingTitle}</button>
+          <button class="secondary-btn ${status === "APPROVED" ? "active" : ""}" type="button" data-admin-status="APPROVED">${tr().adminApprovedTitle}</button>
+          <button class="secondary-btn ${status === "REJECTED" ? "active" : ""}" type="button" data-admin-status="REJECTED">${tr().adminRejectedTitle}</button>
+        </div>
+      </div>
+      <div class="section-title"><h3>${listTitle}</h3><span class="pill">${safeCount(state.adminList.totalItems || filteredSkills.length)}</span></div>
+      <div class="toolbar-row" style="margin:12px 0 14px;">
+        <input id="admin-search-input" value="${escapeHtml(state.adminList.q || "")}" placeholder="${tr().adminSearchPlaceholder}" />
+        <button id="admin-search-btn" class="primary-btn" type="button">${tr().marketplaceSearchButton}</button>
+        <select id="admin-page-size-select">
+          <option value="10" ${state.adminList.pageSize === 10 ? "selected" : ""}>${tr().adminPageSize}: 10</option>
+          <option value="20" ${state.adminList.pageSize === 20 ? "selected" : ""}>${tr().adminPageSize}: 20</option>
+          <option value="50" ${state.adminList.pageSize === 50 ? "selected" : ""}>${tr().adminPageSize}: 50</option>
+        </select>
+      </div>
+      <div class="admin-list" id="admin-skill-list"></div>
+      <div class="pagination-row" style="margin-top:14px;">
+        <button id="admin-prev-btn" class="secondary-btn" type="button" ${state.adminList.page <= 0 ? "disabled" : ""}>${tr().marketplacePrev}</button>
+        <span>${tr().adminPage} ${safeCount((state.adminList.page || 0) + 1)} / ${safeCount(state.adminList.totalPages || 1)}</span>
+        <span>${tr().adminTotal}: ${safeCount(state.adminList.totalItems || 0)}</span>
+        <button id="admin-next-btn" class="secondary-btn" type="button" ${(state.adminList.page || 0) >= ((state.adminList.totalPages || 1) - 1) ? "disabled" : ""}>${tr().marketplaceNext}</button>
+      </div>
     </article>
     <article class="panel">
       <div class="section-title"><h3>${tr().adminSelectedTitle}</h3><span class="pill">${displayStatus(selected?.approvalStatus || "PENDING")}</span></div>
@@ -1415,15 +1823,24 @@ function renderAdmin() {
   `;
   view.appendChild(wrapper);
 
-  const list = wrapper.querySelector("#admin-pending-list");
-  if (!manageableSkills.length) {
-    list.innerHTML = `<p class="helper-text">${tr().adminEmpty}</p>`;
+  const list = wrapper.querySelector("#admin-skill-list");
+  if (!filteredSkills.length) {
+    list.innerHTML = `<p class="helper-text">${emptyCopy}</p>`;
   } else {
-    manageableSkills.forEach((skill) => {
+    filteredSkills.forEach((skill) => {
       const item = document.createElement("button");
       item.type = "button";
       item.className = `admin-item ${skill.id === state.adminSelectedSkillId ? "active" : ""}`;
-      item.innerHTML = `<strong>${skill.name}</strong><div class="helper-text">${skill.category} 闂?${tr().adminSubmittedBy}: ${skill.submittedBy}</div><div class="helper-text">${tr().adminApprovalStatus}: ${displayStatus(skill.approvalStatus)}</div><div class="helper-text">${tr().adminFunctions}: ${skill.functions.join(", ")}</div>`;
+      const auditMeta = status === "PENDING"
+        ? `${state.language === "zh" ? "????" : "Submitted"}: ${skill.submittedAt || "--"}`
+        : `${state.language === "zh" ? "????" : "Reviewed"}: ${skill.reviewedAt || "--"} ? ${state.language === "zh" ? "???" : "Reviewer"}: ${skill.reviewedBy || "--"}`;
+      item.innerHTML = `
+        <strong>${skill.name}</strong>
+        <div class="helper-text">${skill.category} ? ${tr().adminSubmittedBy}: ${skill.submittedBy}</div>
+        <div class="helper-text">${tr().adminApprovalStatus}: ${displayStatus(skill.approvalStatus)} ? ${tr().adminStatus}: ${displayStatus(skill.status)}</div>
+        <div class="helper-text">${auditMeta}</div>
+        <div class="helper-text">${tr().adminFunctions}: ${skill.functions.join(", ")}</div>
+      `;
       item.addEventListener("click", () => {
         state.adminSelectedSkillId = skill.id;
         renderAdmin();
@@ -1432,12 +1849,69 @@ function renderAdmin() {
     });
   }
 
+  wrapper.querySelectorAll("[data-admin-status]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const nextStatus = button.dataset.adminStatus;
+      state.adminDrafts[currentAdminStatus()] = {
+        q: state.adminList.q,
+        pageSize: state.adminList.pageSize
+      };
+      state.adminList.status = nextStatus;
+      syncAdminDraftState();
+      state.adminList.page = 0;
+      state.adminSelectedSkillId = null;
+      await refreshUserData();
+    });
+  });
+
+  const adminSearchInput = wrapper.querySelector("#admin-search-input");
+  const runAdminSearch = async () => {
+    state.adminList.q = adminSearchInput.value.trim();
+    state.adminDrafts[currentAdminStatus()] = {
+      q: state.adminList.q,
+      pageSize: state.adminList.pageSize
+    };
+    state.adminList.page = 0;
+    state.adminSelectedSkillId = null;
+    await refreshUserData();
+  };
+  wrapper.querySelector("#admin-search-btn").addEventListener("click", runAdminSearch);
+  adminSearchInput.addEventListener("keydown", async (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      await runAdminSearch();
+    }
+  });
+  wrapper.querySelector("#admin-page-size-select").addEventListener("change", async (event) => {
+    state.adminList.pageSize = Number(event.target.value);
+    state.adminDrafts[currentAdminStatus()] = {
+      q: state.adminList.q,
+      pageSize: state.adminList.pageSize
+    };
+    state.adminList.page = 0;
+    state.adminSelectedSkillId = null;
+    await refreshUserData();
+  });
+  wrapper.querySelector("#admin-prev-btn").addEventListener("click", async () => {
+    state.adminList.page = Math.max(0, state.adminList.page - 1);
+    state.adminSelectedSkillId = null;
+    await refreshUserData();
+  });
+  wrapper.querySelector("#admin-next-btn").addEventListener("click", async () => {
+    state.adminList.page += 1;
+    state.adminSelectedSkillId = null;
+    await refreshUserData();
+  });
+
   const editor = wrapper.querySelector("#admin-editor");
   if (!selected) {
     editor.innerHTML = `<p class="helper-text">${tr().adminPick}</p>`;
     return;
   }
 
+  const canPublish = selected.approvalStatus === "APPROVED" && selected.status !== "active";
+  const canUnpublish = selected.approvalStatus === "APPROVED" && selected.status === "active";
+  const reviewHistory = Array.isArray(selected.reviewHistory) ? selected.reviewHistory : [];
   editor.innerHTML = `
     <form id="admin-skill-form" class="form-grid">
       <label>${tr().adminName}<input name="name" value="${selected.name}" /></label>
@@ -1456,10 +1930,22 @@ function renderAdmin() {
       <label>${tr().skillOperatingSystem}<input name="operatingSystem" value="${selected.operatingSystem || ""}" /></label>
       <div class="two-grid">
         <label>${tr().adminPrice}<input name="pricePerCall" type="number" step="0.01" value="${selected.pricePerCall}" /></label>
-        <label>${tr().adminStatus}<input name="status" value="${selected.status}" /></label>
+        <label>${tr().adminStatus}
+          <select name="status">
+            <option value="draft" ${selected.status === "draft" ? "selected" : ""}>${displayStatus("draft")}</option>
+            <option value="active" ${selected.status === "active" ? "selected" : ""}>${displayStatus("active")}</option>
+            <option value="revoked" ${selected.status === "revoked" ? "selected" : ""}>${displayStatus("revoked")}</option>
+          </select>
+        </label>
       </div>
       <div class="two-grid">
-        <label>${tr().adminApprovalStatus}<input name="approvalStatus" value="${selected.approvalStatus}" /></label>
+        <label>${tr().adminApprovalStatus}
+          <select name="approvalStatus">
+            <option value="PENDING" ${selected.approvalStatus === "PENDING" ? "selected" : ""}>${displayStatus("PENDING")}</option>
+            <option value="APPROVED" ${selected.approvalStatus === "APPROVED" ? "selected" : ""}>${displayStatus("APPROVED")}</option>
+            <option value="REJECTED" ${selected.approvalStatus === "REJECTED" ? "selected" : ""}>${displayStatus("REJECTED")}</option>
+          </select>
+        </label>
         <label>${tr().adminSubmittedBy}<input name="submittedBy" value="${selected.submittedBy}" disabled /></label>
       </div>
       <div class="two-grid">
@@ -1474,8 +1960,28 @@ function renderAdmin() {
         <label>${tr().adminUserRatingAvg}<input name="userRatingAvg" type="number" step="0.1" value="${selected.userRatingAvg}" /></label>
         <label>${tr().adminUserRatingCount}<input name="userRatingCount" type="number" value="${selected.userRatingCount}" /></label>
       </div>
+      <article class="panel">
+        <div class="section-title"><h3>${state.language === "zh" ? "????" : "Review history"}</h3><span class="pill">${reviewHistory.length}</span></div>
+        <div class="review-list">
+          ${reviewHistory.length
+            ? reviewHistory.map((entry) => `
+              <article class="review-card">
+                <div class="row-between">
+                  <strong>${displayStatus(entry.result)}</strong>
+                  <small>${entry.timestamp}</small>
+                </div>
+                <p>${state.language === "zh" ? "???" : "Reviewer"}: ${entry.reviewerName}</p>
+                <p>${entry.note || "--"}</p>
+              </article>
+            `).join("")
+            : `<p class="helper-text">${tr().adminPick}</p>`}
+        </div>
+      </article>
       <div class="admin-actions">
         <button class="primary-btn" type="button" id="admin-approve-btn">${tr().adminApprove}</button>
+        <button class="secondary-btn" type="button" id="admin-reject-btn">${tr().adminReject}</button>
+        ${canPublish ? `<button class="secondary-btn" type="button" id="admin-publish-btn">${tr().adminPublish}</button>` : ""}
+        ${canUnpublish ? `<button class="secondary-btn" type="button" id="admin-unpublish-btn">${tr().adminUnpublish}</button>` : ""}
         <button class="secondary-btn" type="submit">${tr().adminSave}</button>
         <button class="danger-btn" type="button" id="admin-delete-btn">${tr().adminDelete}</button>
       </div>
@@ -1489,8 +1995,42 @@ function renderAdmin() {
       headers: authHeaders()
     });
     showToast(tr().adminApproved);
+    state.adminSelectedSkillId = null;
     await refreshData(false);
   });
+  editor.querySelector("#admin-reject-btn").addEventListener("click", async () => {
+    await api(`/admin/skills/${selected.id}/reject`, {
+      method: "POST",
+      headers: authHeaders()
+    });
+    showToast(tr().adminRejected);
+    state.adminSelectedSkillId = null;
+    await refreshData(false);
+  });
+  const publishButton = editor.querySelector("#admin-publish-btn");
+  if (publishButton) {
+    publishButton.addEventListener("click", async () => {
+      await api(`/admin/skills/${selected.id}`, {
+        method: "PUT",
+        headers: authHeaders(),
+        body: JSON.stringify({ ...selected, approvalStatus: "APPROVED", status: "active" })
+      });
+      showToast(tr().adminPublished);
+      await refreshData(false);
+    });
+  }
+  const unpublishButton = editor.querySelector("#admin-unpublish-btn");
+  if (unpublishButton) {
+    unpublishButton.addEventListener("click", async () => {
+      await api(`/admin/skills/${selected.id}`, {
+        method: "PUT",
+        headers: authHeaders(),
+        body: JSON.stringify({ ...selected, approvalStatus: "APPROVED", status: "revoked" })
+      });
+      showToast(tr().adminUnpublished);
+      await refreshData(false);
+    });
+  }
   editor.querySelector("#admin-delete-btn").addEventListener("click", async () => {
     await api(`/admin/skills/${selected.id}`, {
       method: "DELETE",
@@ -1535,6 +2075,10 @@ function renderAdmin() {
 }
 
 async function loadSkillDetail() {
+  if (!currentUser()) {
+    showLoginModal();
+    return;
+  }
   if (!state.selectedSkillId && state.skills.length) {
     state.selectedSkillId = state.skills[0].id;
   }
@@ -1552,6 +2096,7 @@ function rerenderViews() {
   renderTutorial();
   renderDashboard();
   renderMarketplace();
+  renderSubmitView();
   renderSkillDetail();
   renderProfile();
   renderAdmin();
@@ -1562,28 +2107,21 @@ function rerenderViews() {
 }
 
 async function refreshData(alsoReloadSkill) {
+  return refreshDataWithOptions(alsoReloadSkill, {});
+}
+
+function hasLoadedPublicData() {
+  return Boolean(state.welcome && state.agentGuide && state.dashboard);
+}
+
+async function refreshPublicData(alsoReloadSkill) {
   const skillPath = `/skills?q=${encodeURIComponent(state.skillsPage.q)}&function=${encodeURIComponent(state.skillsPage.functionName)}&readiness=${encodeURIComponent(state.skillsPage.readiness)}&hideTemplates=${state.skillsPage.hideTemplates}&page=${state.skillsPage.page}&pageSize=${state.skillsPage.pageSize}`;
-  const baseRequests = [
+  const [welcome, agentGuide, dashboard, skillsResponse] = await Promise.all([
     api(""),
     api("/agent-guide"),
     api("/dashboard"),
     api(skillPath)
-  ];
-  const userProfileRequest = state.authToken
-    ? api("/users/me", { headers: authHeaders() }).catch((error) => {
-        if (error.status === 401) {
-          clearAuthState();
-          return null;
-        }
-        throw error;
-      })
-    : Promise.resolve(null);
-
-  const [welcome, agentGuide, dashboard, skillsResponse, userProfile] = await Promise.all([
-    ...baseRequests,
-    userProfileRequest
   ]);
-
   state.welcome = welcome;
   state.agentGuide = agentGuide;
   state.dashboard = dashboard;
@@ -1593,27 +2131,68 @@ async function refreshData(alsoReloadSkill) {
   const maxValidPage = Math.max((state.skillsPage.totalPages || 1) - 1, 0);
   if (state.skillsPage.page > maxValidPage) {
     state.skillsPage.page = maxValidPage;
-    await refreshData(alsoReloadSkill);
+    await refreshPublicData(alsoReloadSkill);
     return;
   }
+  if (alsoReloadSkill || (state.selectedView === "skill" && (state.selectedSkillId || state.skills.length))) {
+    await loadSkillDetail();
+  }
+}
+
+async function refreshUserData() {
+  if (!state.authToken) {
+    state.userProfile = null;
+    state.pendingSkills = [];
+    state.adminSkills = [];
+    rerenderViews();
+    return;
+  }
+
+  const userProfile = await api("/users/me", { headers: authHeaders() }).catch((error) => {
+    if (error.status === 401) {
+      clearAuthState();
+      return null;
+    }
+    throw error;
+  });
+
   state.userProfile = userProfile;
   if (userProfile?.user) {
     state.currentUser = userProfile.user;
   }
-  const pendingSkillsPromise = isAdmin()
-    ? api("/admin/skills/pending", { headers: authHeaders() }).catch((error) => {
+  rerenderViews();
+
+  const adminSkills = await (isAdmin()
+    ? api(`/admin/skills?status=${encodeURIComponent(state.adminList.status)}&q=${encodeURIComponent(state.adminList.q)}&page=${state.adminList.page}&pageSize=${state.adminList.pageSize}`, { headers: authHeaders() }).catch((error) => {
         if (error.status === 401 || error.status === 403) {
-          return [];
+          return { items: [], page: 0, pageSize: state.adminList.pageSize, totalItems: 0, totalPages: 0, status: state.adminList.status, q: state.adminList.q };
         }
         throw error;
       })
-    : Promise.resolve([]);
-
-  if (alsoReloadSkill || (state.selectedView === "skill" && (state.selectedSkillId || state.skills.length))) {
-    await loadSkillDetail();
-  }
+    : Promise.resolve({ items: [], page: 0, pageSize: state.adminList.pageSize, totalItems: 0, totalPages: 0, status: state.adminList.status, q: state.adminList.q }));
+  state.adminSkills = adminSkills.items || [];
+  state.pendingSkills = state.adminSkills.filter((skill) => skill.approvalStatus === "PENDING");
+  state.adminList.page = adminSkills.page ?? state.adminList.page;
+  state.adminList.pageSize = adminSkills.pageSize ?? state.adminList.pageSize;
+  state.adminList.totalItems = adminSkills.totalItems ?? state.adminSkills.length;
+  state.adminList.totalPages = adminSkills.totalPages ?? 1;
+  state.adminList.status = adminSkills.status ?? state.adminList.status;
+  state.adminList.q = adminSkills.q ?? state.adminList.q;
   rerenderViews();
-  state.pendingSkills = await pendingSkillsPromise;
+}
+
+async function refreshDataWithOptions(alsoReloadSkill, options = {}) {
+  const skipPublic = Boolean(options.skipPublic);
+  const skipUser = Boolean(options.skipUser);
+
+  if (!skipPublic) {
+    await refreshPublicData(alsoReloadSkill);
+    rerenderViews();
+  }
+  if (!skipUser) {
+    await refreshUserData();
+    return;
+  }
   rerenderViews();
 }
 
@@ -1623,6 +2202,9 @@ function initNavigation() {
     if (!button) return;
     if (button.dataset.view === "skill" && !state.skillDetail) {
         await loadSkillDetail();
+    }
+    if (button.dataset.view === "admin" && isAdmin()) {
+      await refreshUserData();
     }
     setView(button.dataset.view);
   });
@@ -1647,19 +2229,47 @@ function initAuthModeTabs() {
   });
 }
 
+async function sendRegisterCode() {
+  clearAuthFeedback();
+  const email = String(loginEmailInput.value || "").trim();
+  if (!email) {
+    setAuthFeedback(tr().registerFailed.replace("{error}", state.language === "zh" ? "\u8bf7\u5148\u586b\u5199\u90ae\u7bb1\u3002" : "Please enter your email first."), "error");
+    return;
+  }
+  const originalText = sendCodeButton.textContent;
+  sendCodeButton.disabled = true;
+  sendCodeButton.textContent = tr().registerCodeSending;
+  try {
+    await api("/auth/register/request-code", {
+      method: "POST",
+      body: JSON.stringify({ email, language: state.language })
+    });
+    setAuthFeedback(tr().registerCodeSent, "success");
+  } catch (error) {
+    setAuthFeedback(tr().registerFailed.replace("{error}", error.message), "error");
+  } finally {
+    sendCodeButton.disabled = false;
+    sendCodeButton.textContent = originalText;
+  }
+}
+
 function initLoginForm() {
+  sendCodeButton.addEventListener("click", async () => {
+    await sendRegisterCode();
+  });
   loginForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     clearAuthFeedback();
     const formData = new FormData(loginForm);
     const name = String(formData.get("name") || "").trim();
     const email = String(formData.get("username") || "").trim();
+    const verificationCode = String(formData.get("verificationCode") || "").trim();
     const password = String(formData.get("password") || "");
     const isRegister = state.authMode === "register";
     try {
       const path = isRegister ? "/auth/register" : "/auth/login";
       const payload = isRegister
-        ? { name, email, password }
+        ? { name, email, password, verificationCode }
         : { email, password };
       const response = await api(path, {
         method: "POST",
@@ -1673,7 +2283,7 @@ function initLoginForm() {
       setView("welcome");
       rerenderViews();
       setBanner(withApiBase(successMessage), "success");
-      refreshData(false).catch((error) => {
+      refreshDataWithOptions(false, { skipPublic: hasLoadedPublicData() }).catch((error) => {
         setBanner(withApiBase(tr().failed.replace("{error}", error.message)), "error");
       });
     } catch (error) {
@@ -1694,16 +2304,11 @@ async function init() {
   updateLanguageUi();
   setView("welcome");
   rerenderViews();
-  if (!state.authToken) {
-    showLoginModal();
-  }
   try {
     clearBanner();
     await refreshData(false);
     if (currentUser()) {
       setBanner(withApiBase(tr().connected), "success");
-    } else {
-      showLoginModal();
     }
   } catch (error) {
     setBanner(withApiBase(tr().failed.replace("{error}", error.message)), "error");

@@ -11,8 +11,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 GLAMA_BASE = "https://glama.ai/mcp/servers"
 TARGET_COUNT = 3000
-OUTPUT_PATH = r"C:\Workspace\nexra\backend\src\main\resources\data\skills.json"
-REPORT_PATH = r"C:\Workspace\nexra\backend\src\main\resources\data\skills-import-report.json"
+OUTPUT_PATH = r"C:\Workspace\nexra\backend_py\data\skills.json"
+REPORT_PATH = r"C:\Workspace\nexra\backend_py\data\skills-import-report.json"
 
 
 CATEGORY_TERMS = [

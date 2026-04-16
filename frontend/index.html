@@ -44,6 +44,7 @@
         <section id="tutorial-view" class="view"></section>
         <section id="dashboard-view" class="view"></section>
         <section id="marketplace-view" class="view"></section>
+        <section id="submit-view" class="view"></section>
         <section id="skill-view" class="view"></section>
         <section id="profile-view" class="view"></section>
         <section id="admin-view" class="view"></section>
@@ -69,6 +70,11 @@
           <input id="login-name" name="name" class="hidden" autocomplete="name" />
           <label for="login-username" id="login-username-label">Email</label>
           <input id="login-username" name="username" autocomplete="username" />
+          <label for="register-code" id="register-code-label" class="hidden">Verification code</label>
+          <div id="register-code-row" class="auth-inline hidden">
+            <input id="register-code" name="verificationCode" autocomplete="one-time-code" inputmode="numeric" maxlength="6" />
+            <button class="secondary-btn" id="send-code-btn" type="button">Send code</button>
+          </div>
           <label for="login-password" id="login-password-label">Password</label>
           <input id="login-password" name="password" type="password" autocomplete="current-password" minlength="6" />
           <button class="primary-btn" id="login-submit" type="submit">Sign in</button>

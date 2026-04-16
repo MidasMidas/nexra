@@ -2,7 +2,7 @@
   "host": "127.0.0.1",
   "port": 8080,
   "databasePath": "backend_py/data/nexra-state.json",
-  "skillDataFile": "backend/src/main/resources/data/skills.json",
+  "skillDataFile": "backend_py/data/skills.json",
   "skillSync": {
     "enabled": true,
     "targetCount": 3000,

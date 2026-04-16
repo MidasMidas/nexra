@@ -1,4 +1,4 @@
-﻿import json
+import json
 import logging
 from http.server import BaseHTTPRequestHandler
 from urllib.parse import parse_qs, urlparse
@@ -48,8 +48,12 @@ def create_handler(app):
                 self._send_json(500, {"message": "Internal server error."})
 
         def route(self, method, path, query, payload):
-            current_app = self._app(method, path)
             auth = self.headers.get("Authorization")
+            if method == "POST" and path == "/api/auth/logout":
+                # Logout is client-driven in the current stateless token model.
+                # Return immediately so sign-out is not blocked by service cold starts.
+                return {"message": "Logged out."}
+            current_app = self._app(method, path)
             if method == "GET" and path == "/api":
                 return current_app.get_welcome(self._request_origin(), self._api_base_url())
             if method == "GET" and path == "/api/agent-guide":
@@ -58,10 +62,10 @@ def create_handler(app):
                 return current_app.get_dashboard()
             if method == "POST" and path == "/api/auth/login":
                 return current_app.login(payload or {})
+            if method == "POST" and path == "/api/auth/register/request-code":
+                return current_app.request_register_code(payload or {})
             if method == "POST" and path == "/api/auth/register":
                 return current_app.register(payload or {})
-            if method == "POST" and path == "/api/auth/logout":
-                return current_app.logout(auth)
             if method == "GET" and path == "/api/skills":
                 return current_app.search_skills(
                     query=query.get("q", ""),
@@ -77,6 +81,8 @@ def create_handler(app):
                 return current_app.get_skill_detail(path.removeprefix("/api/skills/"))
             if method == "POST" and path == "/api/skills/submissions":
                 return current_app.submit_skill(auth, payload or {})
+            if method == "PUT" and path.startswith("/api/skills/submissions/"):
+                return current_app.update_submitted_skill(auth, path.removeprefix("/api/skills/submissions/"), payload or {})
             if method == "POST" and path.endswith("/reviews") and path.startswith("/api/skills/"):
                 skill_id = path[len("/api/skills/") : -len("/reviews")]
                 return current_app.add_review(auth, skill_id, payload or {})
@@ -92,11 +98,22 @@ def create_handler(app):
                 return current_app.get_api_keys(auth)
             if method == "POST" and path == "/api/keys":
                 return current_app.create_api_key(auth, payload or {})
+            if method == "GET" and path == "/api/admin/skills":
+                return current_app.get_admin_skills(
+                    auth,
+                    status=query.get("status", ""),
+                    search=query.get("q", ""),
+                    page=int(query.get("page", "0")),
+                    page_size=int(query.get("pageSize", "10")),
+                )
             if method == "GET" and path == "/api/admin/skills/pending":
                 return current_app.get_pending_skills(auth)
             if method == "POST" and path.startswith("/api/admin/skills/") and path.endswith("/approve"):
                 skill_id = path[len("/api/admin/skills/") : -len("/approve")]
                 return current_app.approve_skill(auth, skill_id)
+            if method == "POST" and path.startswith("/api/admin/skills/") and path.endswith("/reject"):
+                skill_id = path[len("/api/admin/skills/") : -len("/reject")]
+                return current_app.reject_skill(auth, skill_id)
             if method == "PUT" and path.startswith("/api/admin/skills/"):
                 return current_app.admin_update_skill(auth, path.removeprefix("/api/admin/skills/"), payload or {})
             if method == "DELETE" and path.startswith("/api/admin/skills/"):

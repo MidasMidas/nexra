@@ -4,16 +4,29 @@ This guide deploys Nexra to an Ubuntu cloud server with:
 
 - `nginx` serving the frontend
 - `systemd` managing the Python backend
-- a local JSON state file stored on the server
+- a local JSON state file stored on the server, or an external MySQL / Postgres database
 - optional HTTPS via `certbot`
 
 ## What Storage Is Used
 
-The current deployment uses a local JSON state file.
+The default deployment uses a local JSON state file.
 
 - State file: `/opt/nexra/data/nexra-state.json`
 - Imported skill source file: `/opt/nexra/data/skills.json`
 - Runtime backend config: `/opt/nexra/backend_py/config.json`
+
+You can also switch the backend to MySQL by setting:
+
+- `NEXRA_STATE_BACKEND=mysql`
+- `MYSQL_URL`
+
+Or by setting:
+
+- `MYSQL_HOST`
+- `MYSQL_PORT`
+- `MYSQL_USER`
+- `MYSQL_PASSWORD`
+- `MYSQL_DATABASE`
 
 ## Server Requirements
 

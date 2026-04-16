@@ -3,7 +3,7 @@ param(
     [string]$DbPath = "backend_py/data/nexra-state.json",
     [string]$BindHost = "127.0.0.1",
     [int]$Port = 8080,
-    [string]$SkillDataFile = "backend/src/main/resources/data/skills.json",
+    [string]$SkillDataFile = "backend_py/data/skills.json",
     [switch]$DisableSkillSync
 )
 

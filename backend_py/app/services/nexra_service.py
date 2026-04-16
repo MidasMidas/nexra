@@ -1,19 +1,21 @@
-﻿import json
+import json
 import logging
 import base64
 import hashlib
 import hmac
 import math
 import os
+import random
 import re
 import sqlite3
 import threading
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from app.config import ROOT, resolve_config_path
 from app.common.errors import ApiError
 from app.common.utils import clamp, now_iso, safe_text
+from app.services.email_service import EmailService
 from app.services.sync_service import SyncManager
 from app.storage.state_store import create_state_store
 
@@ -97,6 +99,7 @@ class NexraService:
         self.state_store = create_state_store(self.config)
         self.lock = threading.RLock()
         self.conn = None
+        self.email_service = EmailService()
         self.sync_manager = SyncManager(self)
         self._prepare()
 
@@ -138,6 +141,12 @@ class NexraService:
                     user_id TEXT NOT NULL,
                     created_at TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS email_verifications (
+                    email TEXT PRIMARY KEY,
+                    code TEXT NOT NULL,
+                    expires_at TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                );
                 CREATE TABLE IF NOT EXISTS skills (
                     id TEXT PRIMARY KEY,
                     name TEXT NOT NULL,
@@ -154,6 +163,10 @@ class NexraService:
                     invocation_method TEXT NOT NULL,
                     submitted_by TEXT NOT NULL,
                     approval_status TEXT NOT NULL,
+                    submitted_at TEXT NOT NULL,
+                    reviewed_at TEXT,
+                    reviewed_by TEXT,
+                    review_result TEXT,
                     source TEXT NOT NULL,
                     source_url TEXT NOT NULL,
                     source_author TEXT NOT NULL,
@@ -174,6 +187,15 @@ class NexraService:
                     comment TEXT NOT NULL,
                     timestamp TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS skill_review_events (
+                    id TEXT PRIMARY KEY,
+                    skill_id TEXT NOT NULL,
+                    reviewer_user_id TEXT NOT NULL,
+                    reviewer_name TEXT NOT NULL,
+                    result TEXT NOT NULL,
+                    note TEXT NOT NULL,
+                    timestamp TEXT NOT NULL
+                );
                 CREATE TABLE IF NOT EXISTS api_keys (
                     id TEXT PRIMARY KEY,
                     name TEXT NOT NULL,
@@ -189,6 +211,30 @@ class NexraService:
                 );
                 """
             )
+            self._migrate_schema(conn)
+
+    def _migrate_schema(self, conn):
+        migrations = [
+            "ALTER TABLE skills ADD COLUMN submitted_at TEXT",
+            "ALTER TABLE skills ADD COLUMN reviewed_at TEXT",
+            "ALTER TABLE skills ADD COLUMN reviewed_by TEXT",
+            "ALTER TABLE skills ADD COLUMN review_result TEXT",
+        ]
+        for statement in migrations:
+            try:
+                conn.execute(statement)
+            except Exception:
+                pass
+        conn.execute(
+            """
+            UPDATE skills
+            SET submitted_at = COALESCE(submitted_at, '2026-01-01T00:00:00Z'),
+                reviewed_at = reviewed_at,
+                reviewed_by = reviewed_by,
+                review_result = COALESCE(review_result, approval_status)
+            WHERE submitted_at IS NULL OR review_result IS NULL
+            """
+        )
 
     def _seed_defaults(self):
         with self.lock, self.connect() as conn:
@@ -219,6 +265,10 @@ class NexraService:
                         "invocationMethod": "REST API with JSON instructions",
                         "submittedBy": "user_1",
                         "approvalStatus": "PENDING",
+                        "submittedAt": "2026-01-01T00:00:00Z",
+                        "reviewedAt": None,
+                        "reviewedBy": "",
+                        "reviewResult": "PENDING",
                         "source": "manual",
                         "sourceUrl": "https://example.com/report-composer",
                         "sourceAuthor": "Alice Builder",
@@ -277,9 +327,11 @@ class NexraService:
                 """
                 DELETE FROM users;
                 DELETE FROM sessions;
+                DELETE FROM email_verifications;
                 DELETE FROM skills;
                 DELETE FROM skill_functions;
                 DELETE FROM reviews;
+                DELETE FROM skill_review_events;
                 DELETE FROM api_keys;
                 DELETE FROM billing_transactions;
                 """
@@ -294,21 +346,27 @@ class NexraService:
                     "INSERT INTO sessions (token, user_id, created_at) VALUES (?, ?, ?)",
                     (row["token"], row["user_id"], row["created_at"]),
                 )
+            for row in snapshot.get("email_verifications", []):
+                conn.execute(
+                    "INSERT INTO email_verifications (email, code, expires_at, created_at) VALUES (?, ?, ?, ?)",
+                    (row["email"], row["code"], row["expires_at"], row["created_at"]),
+                )
             for row in snapshot.get("skills", []):
                 conn.execute(
                     """
                     INSERT INTO skills (
                         id, name, category, description, price_per_call, status, success_rate,
                         latency_p95, cost_efficiency, user_rating_avg, user_rating_count, recent_calls,
-                        invocation_method, submitted_by, approval_status, source, source_url,
+                        invocation_method, submitted_by, approval_status, submitted_at, reviewed_at, reviewed_by, review_result, source, source_url,
                         source_author, license, operating_system
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         row["id"], row["name"], row["category"], row["description"], row["price_per_call"],
                         row["status"], row["success_rate"], row["latency_p95"], row["cost_efficiency"],
                         row["user_rating_avg"], row["user_rating_count"], row["recent_calls"],
-                        row["invocation_method"], row["submitted_by"], row["approval_status"], row["source"],
+                        row["invocation_method"], row["submitted_by"], row["approval_status"], row.get("submitted_at", "2026-01-01T00:00:00Z"),
+                        row.get("reviewed_at"), row.get("reviewed_by"), row.get("review_result", row["approval_status"]), row["source"],
                         row["source_url"], row["source_author"], row["license"], row["operating_system"],
                     ),
                 )
@@ -321,6 +379,17 @@ class NexraService:
                 conn.execute(
                     "INSERT INTO reviews (id, skill_id, user_id, author, rating, comment, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)",
                     (row["id"], row["skill_id"], row["user_id"], row["author"], row["rating"], row["comment"], row["timestamp"]),
+                )
+            for row in snapshot.get("skill_review_events", []):
+                conn.execute(
+                    """
+                    INSERT INTO skill_review_events (id, skill_id, reviewer_user_id, reviewer_name, result, note, timestamp)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        row["id"], row["skill_id"], row["reviewer_user_id"], row["reviewer_name"],
+                        row["result"], row["note"], row["timestamp"],
+                    ),
                 )
             for row in snapshot.get("api_keys", []):
                 conn.execute(
@@ -339,9 +408,11 @@ class NexraService:
             snapshot = {
                 "users": [dict(row) for row in conn.execute("SELECT * FROM users").fetchall()],
                 "sessions": [dict(row) for row in conn.execute("SELECT * FROM sessions").fetchall()],
+                "email_verifications": [dict(row) for row in conn.execute("SELECT * FROM email_verifications").fetchall()],
                 "skills": [dict(row) for row in conn.execute("SELECT * FROM skills").fetchall()],
                 "skill_functions": [dict(row) for row in conn.execute("SELECT * FROM skill_functions").fetchall()],
                 "reviews": [dict(row) for row in conn.execute("SELECT * FROM reviews").fetchall()],
+                "skill_review_events": [dict(row) for row in conn.execute("SELECT * FROM skill_review_events").fetchall()],
                 "api_keys": [dict(row) for row in conn.execute("SELECT * FROM api_keys").fetchall()],
                 "billing_transactions": [dict(row) for row in conn.execute("SELECT * FROM billing_transactions").fetchall()],
             }
@@ -355,6 +426,7 @@ class NexraService:
             return {
                 "users": [dict(row) for row in conn.execute("SELECT * FROM users ORDER BY id ASC").fetchall()],
                 "sessions": [dict(row) for row in conn.execute("SELECT * FROM sessions ORDER BY token ASC").fetchall()],
+                "verifications": [dict(row) for row in conn.execute("SELECT * FROM email_verifications ORDER BY email ASC").fetchall()],
             }
 
     def _save_auth_state(self):
@@ -389,11 +461,13 @@ class NexraService:
         auth_state = self.state_store.load_auth_state() or {}
         users = auth_state.get("users", [])
         sessions = auth_state.get("sessions", [])
+        verifications = auth_state.get("verifications", [])
         if not users:
             self._save_auth_state()
             log.info("Initialized persistent auth state from current in-memory state.")
             return
         with self.lock, self.connect() as conn:
+            conn.execute("DELETE FROM email_verifications")
             conn.execute("DELETE FROM sessions")
             conn.execute("DELETE FROM users")
             for row in users:
@@ -406,8 +480,13 @@ class NexraService:
                     "INSERT INTO sessions (token, user_id, created_at) VALUES (?, ?, ?)",
                     (row["token"], row["user_id"], row["created_at"]),
                 )
+            for row in verifications:
+                conn.execute(
+                    "INSERT INTO email_verifications (email, code, expires_at, created_at) VALUES (?, ?, ?, ?)",
+                    (row["email"], row["code"], row["expires_at"], row["created_at"]),
+                )
             conn.commit()
-        log.info("Loaded auth state from dedicated auth store. users=%s sessions=%s", len(users), len(sessions))
+        log.info("Loaded auth state from dedicated auth store. users=%s sessions=%s verifications=%s", len(users), len(sessions), len(verifications))
 
     def _load_auth_only_state(self):
         if not self._auth_state_supported():
@@ -416,11 +495,13 @@ class NexraService:
         auth_state = self.state_store.load_auth_state() or {}
         users = auth_state.get("users", [])
         sessions = auth_state.get("sessions", [])
+        verifications = auth_state.get("verifications", [])
         if not users:
             snapshot = self.state_store.load_snapshot() or {}
             users = snapshot.get("users", [])
             sessions = snapshot.get("sessions", [])
         with self.lock, self.connect() as conn:
+            conn.execute("DELETE FROM email_verifications")
             conn.execute("DELETE FROM sessions")
             conn.execute("DELETE FROM users")
             if users:
@@ -434,11 +515,16 @@ class NexraService:
                         "INSERT INTO sessions (token, user_id, created_at) VALUES (?, ?, ?)",
                         (row["token"], row["user_id"], row["created_at"]),
                     )
+                for row in verifications:
+                    conn.execute(
+                        "INSERT INTO email_verifications (email, code, expires_at, created_at) VALUES (?, ?, ?, ?)",
+                        (row["email"], row["code"], row["expires_at"], row["created_at"]),
+                    )
             else:
                 self._seed_default_users(conn)
             conn.commit()
         self._save_auth_state()
-        log.info("Initialized auth-only runtime. users=%s sessions=%s", len(users) or 3, len(sessions))
+        log.info("Initialized auth-only runtime. users=%s sessions=%s verifications=%s", len(users) or 3, len(sessions), len(verifications))
 
     def _sync_user_from_auth_state(self, user_id: str):
         if not self._auth_state_supported():
@@ -467,6 +553,10 @@ class NexraService:
             skill.setdefault("sourceAuthor", "")
             skill.setdefault("license", "Unknown")
             skill.setdefault("operatingSystem", "")
+            skill.setdefault("submittedAt", "2026-01-01T00:00:00Z")
+            skill.setdefault("reviewedAt", None)
+            skill.setdefault("reviewedBy", "")
+            skill.setdefault("reviewResult", skill.get("approvalStatus", "APPROVED"))
             skills.append(skill)
         return skills
 
@@ -509,9 +599,9 @@ class NexraService:
             INSERT OR REPLACE INTO skills (
                 id, name, category, description, price_per_call, status, success_rate,
                 latency_p95, cost_efficiency, user_rating_avg, user_rating_count, recent_calls,
-                invocation_method, submitted_by, approval_status, source, source_url,
+                invocation_method, submitted_by, approval_status, submitted_at, reviewed_at, reviewed_by, review_result, source, source_url,
                 source_author, license, operating_system
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 skill["id"],
@@ -529,6 +619,10 @@ class NexraService:
                 skill["invocationMethod"],
                 skill["submittedBy"],
                 skill["approvalStatus"],
+                skill.get("submittedAt", "2026-01-01T00:00:00Z"),
+                skill.get("reviewedAt"),
+                skill.get("reviewedBy", ""),
+                skill.get("reviewResult", skill["approvalStatus"]),
                 skill.get("source", "manual"),
                 skill.get("sourceUrl", ""),
                 skill.get("sourceAuthor", ""),
@@ -584,6 +678,8 @@ class NexraService:
         secret = (
             os.getenv("NEXRA_AUTH_SECRET")
             or os.getenv("JWT_SECRET")
+            or os.getenv("MYSQL_URL")
+            or os.getenv("MYSQL_HOST")
             or os.getenv("POSTGRES_URL")
             or os.getenv("DATABASE_URL")
             or "nexra-dev-secret"
@@ -611,6 +707,71 @@ class NexraService:
             return None
         return safe_text(payload.get("user_id")).strip() or None
 
+    def _generate_verification_code(self):
+        return f"{random.randint(0, 999999):06d}"
+
+    def _parse_iso_datetime(self, value: str):
+        normalized = safe_text(value).strip()
+        if not normalized:
+            return None
+        try:
+            return datetime.fromisoformat(normalized)
+        except ValueError:
+            return None
+
+    def _store_email_verification(self, email: str, code: str):
+        created_at = now_iso()
+        expires_at = (datetime.utcnow() + timedelta(minutes=10)).isoformat()
+        with self.lock, self.connect() as conn:
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO email_verifications (email, code, expires_at, created_at)
+                VALUES (?, ?, ?, ?)
+                """,
+                (email, code, expires_at, created_at),
+            )
+            conn.commit()
+        self._save_auth_state()
+        return {"email": email, "code": code, "expires_at": expires_at, "created_at": created_at}
+
+    def _load_email_verification(self, email: str):
+        with self.connect() as conn:
+            row = conn.execute(
+                "SELECT email, code, expires_at, created_at FROM email_verifications WHERE email = ?",
+                (email,),
+            ).fetchone()
+        return dict(row) if row else None
+
+    def _delete_email_verification(self, email: str):
+        with self.lock, self.connect() as conn:
+            conn.execute("DELETE FROM email_verifications WHERE email = ?", (email,))
+            conn.commit()
+        self._save_auth_state()
+
+    def request_register_code(self, payload):
+        email = safe_text(payload.get("email")).strip().lower()
+        language = safe_text(payload.get("language")).strip().lower() or "en"
+        if not email:
+            raise ApiError(400, "Invalid request: email is required.")
+        if "@" not in email:
+            raise ApiError(400, "Invalid request: email format is invalid.")
+        with self.connect() as conn:
+            existing = conn.execute("SELECT id FROM users WHERE email = ?", (email,)).fetchone()
+            if existing:
+                raise ApiError(400, "This email is already registered.")
+        if not self.email_service.is_configured():
+            raise ApiError(503, "Email verification is not configured yet.")
+        code = self._generate_verification_code()
+        self._store_email_verification(email, code)
+        try:
+            self.email_service.send_verification_code(email, code, language)
+        except Exception as exc:
+            self._delete_email_verification(email)
+            log.exception("Registration verification email delivery failed. email=%s", email)
+            raise ApiError(502, f"Verification email delivery failed: {exc}") from exc
+        log.info("Registration verification code issued. email=%s", email)
+        return {"message": "Verification code sent."}
+
     def login(self, payload):
         email = safe_text(payload.get("email")).strip().lower()
         password = safe_text(payload.get("password"))
@@ -632,15 +793,27 @@ class NexraService:
         name = safe_text(payload.get("name")).strip()
         email = safe_text(payload.get("email")).strip().lower()
         password = safe_text(payload.get("password"))
+        verification_code = safe_text(payload.get("verificationCode")).strip()
         if not email:
             raise ApiError(400, "Invalid request: email is required.")
         if not password:
             raise ApiError(400, "Invalid request: password is required.")
         if len(password) < 6:
             raise ApiError(400, "Invalid request: password must be at least 6 characters.")
+        if not verification_code:
+            raise ApiError(400, "Invalid request: verification code is required.")
         if not name:
             local_part = email.split("@", 1)[0].strip()
             name = local_part or "Nexra User"
+        verification = self._load_email_verification(email)
+        if verification is None:
+            raise ApiError(400, "Please request an email verification code first.")
+        expires_at = self._parse_iso_datetime(verification.get("expires_at"))
+        if expires_at is None or expires_at < datetime.utcnow():
+            self._delete_email_verification(email)
+            raise ApiError(400, "Verification code expired. Please request a new one.")
+        if verification.get("code") != verification_code:
+            raise ApiError(400, "Verification code is invalid.")
         with self.connect() as conn:
             existing = conn.execute("SELECT id FROM users WHERE email = ?", (email,)).fetchone()
             if existing:
@@ -656,6 +829,7 @@ class NexraService:
                 {"id": user_id, "email": email, "password": password, "name": name, "role": "USER"}
             )
             token = self._issue_auth_token(user_id)
+        self._delete_email_verification(email)
         log.info("User registered. userId=%s, email=%s", user_id, email)
         return {"token": token, "user": self._user_response({"id": user_id, "name": name, "email": email, "role": "USER"})}
 
@@ -676,8 +850,10 @@ class NexraService:
 
     def get_dashboard(self):
         skills = self._fetch_all_skills()
-        approved = [skill for skill in skills if skill["status"].lower() != "revoked" and skill["approvalStatus"].upper() == "APPROVED"]
+        approved = [skill for skill in skills if skill["status"].lower() == "active" and skill["approvalStatus"].upper() == "APPROVED"]
         pending = [skill for skill in skills if skill["approvalStatus"].upper() == "PENDING"]
+        trust_values = [self.overall_trust(skill) for skill in skills if self.overall_trust(skill) is not None]
+        recommendation_values = [self.recommendation_score(skill, "", "") for skill in skills]
         top_skills = [
             self._skill_response(skill, "", "")
             for skill in sorted(approved, key=lambda item: self.recommendation_score(item, "", ""), reverse=True)[:3]
@@ -687,8 +863,8 @@ class NexraService:
             "totalIndexedSkills": len(skills),
             "approvedSkills": len(approved),
             "pendingSkills": len(pending),
-            "averageTrust": round(sum(self.overall_trust(skill) for skill in skills) / max(len(skills), 1)),
-            "averageRecommendation": round(sum(self.recommendation_score(skill, "", "") for skill in skills) / max(len(skills), 1)),
+            "averageTrust": round(sum(trust_values) / max(len(trust_values), 1)),
+            "averageRecommendation": round(sum(recommendation_values) / max(len(recommendation_values), 1)),
             "searchableFunctions": searchable_functions,
             "popularSkills": len([skill for skill in skills if skill["recentCalls"] >= 10000]),
             "averageSuccessRate": round(sum(skill["successRate"] for skill in skills) / max(len(skills), 1)),
@@ -766,7 +942,7 @@ class NexraService:
         fallback_candidates = []
         minimum_match = self.minimum_match_threshold(query, function_name)
         for skill in skills:
-            if not include_pending and skill["approvalStatus"].upper() != "APPROVED":
+            if not include_pending and (skill["approvalStatus"].upper() != "APPROVED" or skill["status"].lower() != "active"):
                 continue
             if not self.matches_query(skill, query, function_name, minimum_match):
                 continue
@@ -871,6 +1047,7 @@ class NexraService:
         user_id = self.auth_user_id(authorization)
         user = self.require_user(user_id)
         skill_id = "skill-" + uuid.uuid4().hex[:8]
+        submitted_at = datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
         skill = {
             "id": skill_id,
             "name": safe_text(payload.get("name")).strip(),
@@ -888,6 +1065,10 @@ class NexraService:
             "invocationMethod": safe_text(payload.get("invocationMethod")).strip(),
             "submittedBy": user_id,
             "approvalStatus": "PENDING",
+            "submittedAt": submitted_at,
+            "reviewedAt": None,
+            "reviewedBy": "",
+            "reviewResult": "PENDING",
             "source": self.default_text(payload.get("source"), "manual"),
             "sourceUrl": self.default_text(payload.get("sourceUrl"), ""),
             "sourceAuthor": self.default_text(payload.get("sourceAuthor"), user["name"]),
@@ -909,13 +1090,148 @@ class NexraService:
         )
         return self._skill_response(skill, "", "")
 
+    def update_submitted_skill(self, authorization, skill_id, payload):
+        user_id = self.auth_user_id(authorization)
+        user = self.require_user(user_id)
+        skill = self._find_skill(skill_id)
+        if skill["submittedBy"] != user_id:
+            raise ApiError(403, "You can only edit skills that you submitted.")
+        updated = {
+            **skill,
+            "name": safe_text(payload.get("name")).strip(),
+            "category": safe_text(payload.get("category")).strip(),
+            "description": safe_text(payload.get("description")).strip(),
+            "pricePerCall": float(payload.get("pricePerCall", skill["pricePerCall"])),
+            "functions": self.sanitize_list(payload.get("functions", skill["functions"])),
+            "invocationMethod": safe_text(payload.get("invocationMethod")).strip(),
+            "source": self.default_text(payload.get("source"), skill["source"]),
+            "sourceUrl": self.default_text(payload.get("sourceUrl"), skill["sourceUrl"]),
+            "sourceAuthor": self.default_text(payload.get("sourceAuthor"), user["name"]),
+            "license": self.default_text(payload.get("license"), skill["license"]),
+            "operatingSystem": self.default_text(payload.get("operatingSystem"), skill["operatingSystem"]),
+            "approvalStatus": "PENDING",
+            "status": "draft",
+            "reviewedAt": None,
+            "reviewedBy": "",
+            "reviewResult": "PENDING",
+        }
+        if not updated["name"] or not updated["category"] or not updated["description"] or not updated["functions"] or not updated["invocationMethod"]:
+            raise ApiError(400, "Invalid request: skill submission fields are incomplete.")
+        with self.lock, self.connect() as conn:
+            self._insert_skill(conn, updated)
+            conn.commit()
+            self._save_snapshot()
+        log.info(
+            "Skill updated by submitter. skillId=%s, userId=%s, approvalStatus=%s",
+            skill_id,
+            user_id,
+            updated["approvalStatus"],
+        )
+        return self._skill_response(updated, "", "")
+
     def get_pending_skills(self, authorization):
         self.require_admin(authorization)
         return [
             self._skill_response(skill, "", "")
-            for skill in self._fetch_all_skills()
-            if skill["approvalStatus"].upper() == "PENDING"
+            for skill in sorted(
+                [skill for skill in self._fetch_all_skills() if skill["approvalStatus"].upper() == "PENDING"],
+                key=lambda item: safe_text(item.get("submittedAt")) or "9999",
+            )
         ]
+
+    def _record_skill_review_event(self, conn, skill_id, reviewer, result, note=""):
+        timestamp = datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
+        conn.execute(
+            """
+            INSERT INTO skill_review_events (id, skill_id, reviewer_user_id, reviewer_name, result, note, timestamp)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "sre_" + uuid.uuid4().hex[:10],
+                skill_id,
+                reviewer["id"],
+                reviewer["name"],
+                result,
+                safe_text(note).strip(),
+                timestamp,
+            ),
+        )
+        return timestamp
+
+    def _skill_review_history_map(self, conn):
+        history = {}
+        rows = conn.execute(
+            "SELECT * FROM skill_review_events ORDER BY timestamp DESC, id DESC"
+        ).fetchall()
+        for row in rows:
+            entry = {
+                "id": row["id"],
+                "skillId": row["skill_id"],
+                "reviewerUserId": row["reviewer_user_id"],
+                "reviewerName": row["reviewer_name"],
+                "result": row["result"],
+                "note": row["note"],
+                "timestamp": row["timestamp"],
+            }
+            history.setdefault(row["skill_id"], []).append(entry)
+        return history
+
+    def get_admin_skills(self, authorization, status="", search="", page=0, page_size=10):
+        self.require_admin(authorization)
+        with self.connect() as conn:
+            history_map = self._skill_review_history_map(conn)
+        normalized_status = safe_text(status).strip().upper()
+        filtered = []
+        for skill in self._fetch_all_skills():
+            if normalized_status in {"PENDING", "APPROVED", "REJECTED"} and skill["approvalStatus"].upper() != normalized_status:
+                continue
+            if safe_text(search).strip() and not self.matches_query(skill, search, "", minimum_match=10):
+                search_lower = safe_text(search).strip().lower()
+                review_blob = " ".join(
+                    [
+                        safe_text(skill.get("reviewedBy")),
+                        safe_text(skill.get("reviewResult")),
+                        safe_text(skill.get("submittedBy")),
+                    ]
+                ).lower()
+                if search_lower not in review_blob:
+                    continue
+            filtered.append(skill)
+
+        if normalized_status == "PENDING":
+            filtered.sort(key=lambda item: (safe_text(item.get("submittedAt")) or "9999", item["name"].lower()))
+        else:
+            filtered.sort(
+                key=lambda item: (
+                    safe_text(item.get("reviewedAt")) or "",
+                    item["name"].lower(),
+                ),
+                reverse=True,
+            )
+
+        safe_page_size = min(max(int(page_size or 10), 1), 50)
+        safe_page = max(int(page or 0), 0)
+        total_items = len(filtered)
+        total_pages = max(math.ceil(total_items / safe_page_size), 1)
+        if safe_page >= total_pages:
+            safe_page = max(total_pages - 1, 0)
+        start = safe_page * safe_page_size
+        end = start + safe_page_size
+
+        items = []
+        for skill in filtered[start:end]:
+            item = self._skill_response(skill, "", "")
+            item["reviewHistory"] = history_map.get(skill["id"], [])
+            items.append(item)
+        return {
+            "items": items,
+            "page": safe_page,
+            "pageSize": safe_page_size,
+            "totalItems": total_items,
+            "totalPages": total_pages,
+            "status": normalized_status or "ALL",
+            "q": safe_text(search).strip(),
+        }
 
     def approve_skill(self, authorization, skill_id):
         admin = self.require_admin(authorization)
@@ -923,22 +1239,52 @@ class NexraService:
             row = conn.execute("SELECT * FROM skills WHERE id = ?", (skill_id,)).fetchone()
             if row is None:
                 raise ApiError(404, f"Skill not found: {skill_id}")
-            conn.execute("UPDATE skills SET approval_status = 'APPROVED' WHERE id = ?", (skill_id,))
+            reviewed_at = self._record_skill_review_event(conn, skill_id, admin, "APPROVED")
+            conn.execute(
+                """
+                UPDATE skills
+                SET approval_status = 'APPROVED', status = 'active', reviewed_at = ?, reviewed_by = ?, review_result = 'APPROVED'
+                WHERE id = ?
+                """,
+                (reviewed_at, admin["name"], skill_id),
+            )
             conn.commit()
             self._save_snapshot()
         log.info("Skill approved. skillId=%s, adminUserId=%s", skill_id, admin["id"])
         return self._skill_response(self._find_skill(skill_id), "", "")
 
+    def reject_skill(self, authorization, skill_id):
+        admin = self.require_admin(authorization)
+        with self.lock, self.connect() as conn:
+            row = conn.execute("SELECT * FROM skills WHERE id = ?", (skill_id,)).fetchone()
+            if row is None:
+                raise ApiError(404, f"Skill not found: {skill_id}")
+            reviewed_at = self._record_skill_review_event(conn, skill_id, admin, "REJECTED")
+            conn.execute(
+                """
+                UPDATE skills
+                SET approval_status = 'REJECTED', status = 'draft', reviewed_at = ?, reviewed_by = ?, review_result = 'REJECTED'
+                WHERE id = ?
+                """,
+                (reviewed_at, admin["name"], skill_id),
+            )
+            conn.commit()
+            self._save_snapshot()
+        log.info("Skill rejected. skillId=%s, adminUserId=%s", skill_id, admin["id"])
+        return self._skill_response(self._find_skill(skill_id), "", "")
+
     def admin_update_skill(self, authorization, skill_id, payload):
         admin = self.require_admin(authorization)
         skill = self._find_skill(skill_id)
+        approval_status = self.normalize_approval_status(payload.get("approvalStatus"), skill["approvalStatus"])
+        status = self.normalize_skill_status(payload.get("status"), approval_status, skill["status"])
         updated = {
             **skill,
             "name": safe_text(payload.get("name")).strip(),
             "category": safe_text(payload.get("category")).strip(),
             "description": safe_text(payload.get("description")).strip(),
             "pricePerCall": float(payload.get("pricePerCall", 0)),
-            "status": safe_text(payload.get("status")).strip(),
+            "status": status,
             "successRate": int(payload.get("successRate", 0)),
             "latencyP95": int(payload.get("latencyP95", 0)),
             "costEfficiency": int(payload.get("costEfficiency", 0)),
@@ -947,7 +1293,7 @@ class NexraService:
             "recentCalls": int(payload.get("recentCalls", 0)),
             "functions": self.sanitize_list(payload.get("functions", [])),
             "invocationMethod": safe_text(payload.get("invocationMethod")).strip(),
-            "approvalStatus": safe_text(payload.get("approvalStatus")).strip(),
+            "approvalStatus": approval_status,
             "source": self.default_text(payload.get("source"), skill["source"]),
             "sourceUrl": self.default_text(payload.get("sourceUrl"), skill["sourceUrl"]),
             "sourceAuthor": self.default_text(payload.get("sourceAuthor"), skill["sourceAuthor"]),
@@ -955,6 +1301,17 @@ class NexraService:
             "operatingSystem": self.default_text(payload.get("operatingSystem"), skill["operatingSystem"]),
         }
         with self.lock, self.connect() as conn:
+            if updated["approvalStatus"] != skill["approvalStatus"]:
+                reviewed_at = self._record_skill_review_event(conn, skill_id, admin, updated["approvalStatus"])
+                updated["reviewedAt"] = reviewed_at
+                updated["reviewedBy"] = admin["name"]
+                updated["reviewResult"] = updated["approvalStatus"]
+            elif updated["status"] != skill["status"] and updated["approvalStatus"] == "APPROVED":
+                action = "REPUBLISHED" if updated["status"] == "active" else "UNPUBLISHED"
+                reviewed_at = self._record_skill_review_event(conn, skill_id, admin, action)
+                updated["reviewedAt"] = reviewed_at
+                updated["reviewedBy"] = admin["name"]
+                updated["reviewResult"] = updated["approvalStatus"]
             self._insert_skill(conn, updated)
             conn.commit()
             self._save_snapshot()
@@ -1087,6 +1444,10 @@ class NexraService:
                     "invocationMethod": row["invocation_method"],
                     "submittedBy": row["submitted_by"],
                     "approvalStatus": row["approval_status"],
+                    "submittedAt": row.get("submitted_at"),
+                    "reviewedAt": row.get("reviewed_at"),
+                    "reviewedBy": row.get("reviewed_by"),
+                    "reviewResult": row.get("review_result"),
                     "source": row["source"],
                     "sourceUrl": row["source_url"],
                     "sourceAuthor": row["source_author"],
@@ -1167,14 +1528,26 @@ class NexraService:
         return bonus
 
     def normalized_user_rating(self, skill):
+        if not self.has_user_rating(skill):
+            return None
         return round((float(skill["userRatingAvg"]) / 5.0) * 100)
 
     def agent_score(self, skill):
+        if not self.has_agent_rating(skill):
+            return None
         latency_score = clamp(100 - (int(skill["latencyP95"]) - 200) / 10.0, 35, 100)
         return round(int(skill["successRate"]) * 0.5 + latency_score * 0.3 + int(skill["costEfficiency"]) * 0.2)
 
     def overall_trust(self, skill):
-        return round(self.normalized_user_rating(skill) * 0.45 + self.agent_score(skill) * 0.55)
+        user_score = self.normalized_user_rating(skill)
+        agent_score = self.agent_score(skill)
+        if user_score is not None and agent_score is not None:
+            return round(user_score * 0.45 + agent_score * 0.55)
+        if user_score is not None:
+            return round(user_score)
+        if agent_score is not None:
+            return round(agent_score)
+        return None
 
     def match_score(self, skill, query, function_name):
         no_filters = not safe_text(query).strip() and not safe_text(function_name).strip()
@@ -1223,9 +1596,10 @@ class NexraService:
 
     def recommendation_score(self, skill, query, function_name):
         popularity = clamp(math.log10(int(skill["recentCalls"]) + 10) * 20, 20, 100)
+        trust = self.overall_trust(skill) or 0
         return round(
             self.match_score(skill, query, function_name) * 0.35
-            + self.overall_trust(skill) * 0.35
+            + trust * 0.35
             + popularity * 0.15
             + int(skill["costEfficiency"]) * 0.10
             + int(skill["successRate"]) * 0.05
@@ -1235,7 +1609,8 @@ class NexraService:
         reasons = []
         if self.match_score(skill, query, function_name) >= 75:
             reasons.append("strong capability match")
-        if self.overall_trust(skill) >= 85:
+        trust = self.overall_trust(skill)
+        if trust is not None and trust >= 85:
             reasons.append("high trust")
         if int(skill["recentCalls"]) >= 10000:
             reasons.append("popular in recent usage")
@@ -1302,6 +1677,33 @@ class NexraService:
             return 24
         return 20
 
+    def has_user_rating(self, skill):
+        return int(skill.get("userRatingCount", 0) or 0) > 0
+
+    def has_agent_rating(self, skill):
+        return any(
+            int(skill.get(field, 0) or 0) > 0
+            for field in ("successRate", "latencyP95", "costEfficiency", "recentCalls")
+        )
+
+    def normalize_approval_status(self, approval_status, default="PENDING"):
+        normalized = safe_text(approval_status).strip().upper() or default
+        if normalized not in {"PENDING", "APPROVED", "REJECTED"}:
+            return default
+        return normalized
+
+    def normalize_skill_status(self, status, approval_status="PENDING", default="draft"):
+        normalized = safe_text(status).strip().lower() or default
+        if normalized not in {"active", "draft", "revoked"}:
+            normalized = default
+        if approval_status == "APPROVED" and normalized not in {"active", "revoked"}:
+            return "active"
+        if approval_status == "REJECTED":
+            return "draft"
+        if approval_status == "PENDING" and normalized == "active":
+            return "draft"
+        return normalized
+
     def normalize_sort_by(self, sort_by):
         normalized = safe_text(sort_by).strip().lower()
         if normalized == "relevance":
@@ -1311,9 +1713,10 @@ class NexraService:
     def skill_sort_key(self, skill, query, function_name, sort_by):
         match = self.match_score(skill, query, function_name)
         recommendation = self.recommendation_score(skill, query, function_name)
-        trust = self.overall_trust(skill)
-        agent = self.agent_score(skill)
-        rating = float(skill["userRatingAvg"])
+        trust = self.overall_trust(skill) if self.overall_trust(skill) is not None else -1
+        agent_score = self.agent_score(skill)
+        agent = agent_score if agent_score is not None else -1
+        rating = float(skill["userRatingAvg"]) if self.has_user_rating(skill) else -1
         calls = int(skill["recentCalls"])
         if sort_by == "relevance":
             return (match, recommendation, trust, agent, calls, rating)
@@ -1342,6 +1745,10 @@ class NexraService:
 
     def _skill_response(self, skill, query, function_name):
         agent_score = self.agent_score(skill)
+        normalized_user_rating = self.normalized_user_rating(skill)
+        overall_trust = self.overall_trust(skill)
+        has_user_rating = self.has_user_rating(skill)
+        has_system_rating = self.has_agent_rating(skill)
         return {
             "id": skill["id"],
             "name": skill["name"],
@@ -1355,10 +1762,12 @@ class NexraService:
             "userRatingAvg": skill["userRatingAvg"],
             "userRatingCount": skill["userRatingCount"],
             "recentCalls": skill["recentCalls"],
+            "hasUserRating": has_user_rating,
+            "hasSystemRating": has_system_rating,
             "agentScore": agent_score,
             "systemScore": agent_score,
-            "normalizedUserRating": self.normalized_user_rating(skill),
-            "overallTrust": self.overall_trust(skill),
+            "normalizedUserRating": normalized_user_rating,
+            "overallTrust": overall_trust,
             "matchScore": self.match_score(skill, query, function_name),
             "recommendationScore": self.recommendation_score(skill, query, function_name),
             "recommendationSummary": self.recommendation_summary(skill, query, function_name),
@@ -1366,6 +1775,10 @@ class NexraService:
             "invocationMethod": skill["invocationMethod"],
             "submittedBy": skill["submittedBy"],
             "approvalStatus": skill["approvalStatus"],
+            "submittedAt": skill.get("submittedAt"),
+            "reviewedAt": skill.get("reviewedAt"),
+            "reviewedBy": skill.get("reviewedBy"),
+            "reviewResult": skill.get("reviewResult"),
             "source": skill["source"],
             "sourceUrl": skill["sourceUrl"],
             "sourceAuthor": skill["sourceAuthor"],
