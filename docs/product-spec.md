@@ -14,7 +14,6 @@ Nexra now acts as a skill trust and governance layer:
 - Every skill exposes both user rating and system rating
 - Results are ranked by recommendation score and overall trust
 - Users can submit new skills
-- Admins approve, edit, delete, and maintain skill quality
 - Agents call the chosen skill provider directly outside Nexra
 
 ## Rating Model
@@ -126,16 +125,6 @@ Can:
 - submit reviews
 - submit new skills for approval
 
-### Admin
-
-Can:
-
-- review pending skills
-- approve submitted skills
-- update skill ratings
-- update skill metadata and details
-- delete skills
-
 ## Current API Shape
 
 ### Public and User APIs
@@ -149,14 +138,6 @@ Can:
 - `POST /api/skills/submissions`
 - `GET /api/users/me`
 
-### Admin APIs
-
-- `GET /api/admin/skills?status=PENDING|APPROVED|REJECTED&q=&page=&pageSize=`
-- `POST /api/admin/skills/{id}/approve`
-- `POST /api/admin/skills/{id}/reject`
-- `PUT /api/admin/skills/{id}`
-- `DELETE /api/admin/skills/{id}`
-
 ## MVP Scope Now
 
 Included now:
@@ -167,8 +148,6 @@ Included now:
 - paginated skill results
 - lightweight identity model
 - user-submitted skills
-- admin moderation workflow
-- admin rating/detail maintenance
 - provider docs and calling guidance in skill detail
 
 Still excluded for now:
@@ -182,6 +161,4 @@ Still excluded for now:
 
 - move identity from header-based simulation to real auth
 - persist users, skills, and reviews in MySQL or PostgreSQL
-- add reject flow with audit reason
-- expose admin moderation in the frontend
 - add richer ranking and filtering controls

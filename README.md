@@ -18,7 +18,6 @@ Use Nexra directly through the online product and API:
 - Rank skills by relevance, trust, popularity, and cost efficiency
 - Show provider docs, auth requirements, and call examples
 - Let users submit skills and reviews
-- Let admins review and approve submitted skills
 
 Nexra is not a proxy execution layer in this phase. Agents use Nexra to find skills, then call the selected provider directly.
 
@@ -39,16 +38,6 @@ Public and user flows:
 - `POST /api/skills/submissions`
 - `GET /api/users/me`
 
-Admin flows:
-
-- `GET /api/admin/skills?status=PENDING|APPROVED|REJECTED&q=&page=&pageSize=`
-- `POST /api/admin/skills/{id}/approve`
-- `POST /api/admin/skills/{id}/reject`
-- `PUT /api/admin/skills/{id}`
-- `DELETE /api/admin/skills/{id}`
-- `GET /api/admin/skills/sync/status`
-- `POST /api/admin/skills/sync`
-
 ## Typical Agent Flow
 
 1. Search Nexra for a skill.
@@ -61,6 +50,7 @@ Admin flows:
 
 - [Hosted usage guide](./docs/usage-guide.md)
 - [Product spec](./docs/product-spec.md)
+- [Vercel frontend + Python backend + Supabase Postgres](./docs/vercel-frontend-supabase-backend.md)
 
 ## Contributing
 

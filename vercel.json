@@ -15,6 +15,10 @@
       "use": "@vercel/static"
     },
     {
+      "src": "frontend/config.js",
+      "use": "@vercel/static"
+    },
+    {
       "src": "frontend/styles.css",
       "use": "@vercel/static"
     },
@@ -31,6 +35,10 @@
     {
       "src": "/api/(.*)",
       "dest": "/api/index.py"
+    },
+    {
+      "src": "/config.js",
+      "dest": "/frontend/config.js"
     },
     {
       "src": "/styles.css",

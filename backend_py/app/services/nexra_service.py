@@ -101,6 +101,10 @@ class NexraService:
         self.conn = None
         self.email_service = EmailService()
         self.sync_manager = SyncManager(self)
+        self._dashboard_cache = None
+        self._dashboard_cache_ttl_seconds = 30
+        self._skill_cache = None
+        self._skill_cache_by_id = None
         self._prepare()
 
     def _load_config(self):
@@ -116,6 +120,7 @@ class NexraService:
         if self.load_catalog:
             self._load_snapshot_or_seed()
             self._load_or_initialize_auth_state()
+            self._rebuild_metric_tables()
             self.sync_manager.last_imported_count = self.imported_skill_count()
             self.sync_manager.start_scheduler()
         else:
@@ -134,7 +139,8 @@ class NexraService:
                     email TEXT NOT NULL UNIQUE,
                     password TEXT NOT NULL,
                     name TEXT NOT NULL,
-                    role TEXT NOT NULL
+                    role TEXT NOT NULL,
+                    created_at TEXT NOT NULL
                 );
                 CREATE TABLE IF NOT EXISTS sessions (
                     token TEXT PRIMARY KEY,
@@ -209,22 +215,46 @@ class NexraService:
                     amount REAL NOT NULL,
                     timestamp TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS daily_visits (
+                    metric_date TEXT PRIMARY KEY,
+                    visit_count INTEGER NOT NULL DEFAULT 0,
+                    anonymous_visit_count INTEGER NOT NULL DEFAULT 0
+                );
+                CREATE TABLE IF NOT EXISTS metric_totals (
+                    metric_key TEXT PRIMARY KEY,
+                    metric_value INTEGER NOT NULL DEFAULT 0
+                );
+                CREATE TABLE IF NOT EXISTS metric_daily (
+                    metric_date TEXT PRIMARY KEY,
+                    registered_users INTEGER NOT NULL DEFAULT 0,
+                    visits INTEGER NOT NULL DEFAULT 0,
+                    anonymous_visits INTEGER NOT NULL DEFAULT 0
+                );
                 """
             )
             self._migrate_schema(conn)
 
     def _migrate_schema(self, conn):
         migrations = [
+            "ALTER TABLE users ADD COLUMN created_at TEXT",
             "ALTER TABLE skills ADD COLUMN submitted_at TEXT",
             "ALTER TABLE skills ADD COLUMN reviewed_at TEXT",
             "ALTER TABLE skills ADD COLUMN reviewed_by TEXT",
             "ALTER TABLE skills ADD COLUMN review_result TEXT",
+            "ALTER TABLE daily_visits ADD COLUMN anonymous_visit_count INTEGER NOT NULL DEFAULT 0",
         ]
         for statement in migrations:
             try:
                 conn.execute(statement)
             except Exception:
                 pass
+        conn.execute(
+            """
+            UPDATE users
+            SET created_at = COALESCE(created_at, '2026-01-01T00:00:00Z')
+            WHERE created_at IS NULL OR created_at = ''
+            """
+        )
         conn.execute(
             """
             UPDATE skills
@@ -302,24 +332,110 @@ class NexraService:
                 seeded = True
             if seeded:
                 conn.commit()
-                self._save_snapshot()
+                self._save_catalog_state()
 
     def _seed_default_users(self, conn):
         conn.executemany(
-            "INSERT INTO users (id, email, password, name, role) VALUES (?, ?, ?, ?, ?)",
+            "INSERT INTO users (id, email, password, name, role, created_at) VALUES (?, ?, ?, ?, ?, ?)",
             [
-                ("admin_1", "admin@nexra.local", "admin123", "Nexra Admin", "ADMIN"),
-                ("user_1", "alice@nexra.local", "alice123", "Alice Builder", "USER"),
-                ("user_2", "bob@nexra.local", "bob123", "Bob Operator", "USER"),
+                ("admin_1", "admin@nexra.local", "admin123", "Nexra Admin", "ADMIN", "2026-01-01T00:00:00Z"),
+                ("user_1", "alice@nexra.local", "alice123", "Alice Builder", "USER", "2026-01-01T00:00:00Z"),
+                ("user_2", "bob@nexra.local", "bob123", "Bob Operator", "USER", "2026-01-01T00:00:00Z"),
             ],
         )
 
     def _load_snapshot_or_seed(self):
+        if hasattr(self.state_store, "load_catalog_state"):
+            catalog_state = self.state_store.load_catalog_state()
+            if catalog_state and catalog_state.get("skills"):
+                self._load_catalog_state(catalog_state)
+                return
         snapshot = self.state_store.load_snapshot()
         if snapshot:
             self._load_snapshot(snapshot)
             return
         self._seed_defaults()
+
+    def _load_catalog_state(self, catalog_state):
+        with self.lock, self.connect() as conn:
+            conn.executescript(
+                """
+                DELETE FROM skills;
+                DELETE FROM skill_functions;
+                DELETE FROM reviews;
+                DELETE FROM skill_review_events;
+                DELETE FROM api_keys;
+                DELETE FROM billing_transactions;
+                DELETE FROM daily_visits;
+                """
+            )
+            for row in catalog_state.get("skills", []):
+                self._insert_skill(conn, row)
+            for row in catalog_state.get("reviews", []):
+                conn.execute(
+                    "INSERT INTO reviews (id, skill_id, user_id, author, rating, comment, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (row["id"], row["skill_id"], row["user_id"], row["author"], row["rating"], row["comment"], row["timestamp"]),
+                )
+            for row in catalog_state.get("skill_review_events", []):
+                conn.execute(
+                    """
+                    INSERT INTO skill_review_events (id, skill_id, reviewer_user_id, reviewer_name, result, note, timestamp)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        row["id"],
+                        row["skill_id"],
+                        row["reviewer_user_id"],
+                        row["reviewer_name"],
+                        row["result"],
+                        row["note"],
+                        row["timestamp"],
+                    ),
+                )
+            for row in catalog_state.get("api_keys", []):
+                conn.execute(
+                    "INSERT INTO api_keys (id, name, scope, last_used, status) VALUES (?, ?, ?, ?, ?)",
+                    (row["id"], row["name"], row["scope"], row["last_used"], row["status"]),
+                )
+            for row in catalog_state.get("billing_transactions", []):
+                conn.execute(
+                    "INSERT INTO billing_transactions (id, type, amount, timestamp) VALUES (?, ?, ?, ?)",
+                    (row["id"], row["type"], row["amount"], row["timestamp"]),
+                )
+            for row in catalog_state.get("daily_visits", []):
+                conn.execute(
+                    "INSERT INTO daily_visits (metric_date, visit_count, anonymous_visit_count) VALUES (?, ?, ?)",
+                    (row["metric_date"], row["visit_count"], row.get("anonymous_visit_count", 0)),
+                )
+            conn.commit()
+
+    def _current_catalog_state(self):
+        with self.lock, self.connect() as conn:
+            return {
+                "skills": self._fetch_all_skills(),
+                "skill_functions": [dict(row) for row in conn.execute("SELECT * FROM skill_functions").fetchall()],
+                "reviews": [dict(row) for row in conn.execute("SELECT * FROM reviews").fetchall()],
+                "skill_review_events": [dict(row) for row in conn.execute("SELECT * FROM skill_review_events").fetchall()],
+                "api_keys": [dict(row) for row in conn.execute("SELECT * FROM api_keys").fetchall()],
+                "billing_transactions": [dict(row) for row in conn.execute("SELECT * FROM billing_transactions").fetchall()],
+                "daily_visits": [dict(row) for row in conn.execute("SELECT * FROM daily_visits").fetchall()],
+            }
+
+    def _save_catalog_state(self):
+        if hasattr(self.state_store, "save_catalog_state"):
+            self.state_store.save_catalog_state(self._current_catalog_state())
+            return
+        self._save_snapshot()
+
+    def _invalidate_skill_cache(self):
+        self._skill_cache = None
+        self._skill_cache_by_id = None
+
+    def _copy_skill(self, skill):
+        return {
+            **skill,
+            "functions": list(skill.get("functions", [])),
+        }
 
     def _load_snapshot(self, snapshot):
         with self.lock, self.connect() as conn:
@@ -334,12 +450,13 @@ class NexraService:
                 DELETE FROM skill_review_events;
                 DELETE FROM api_keys;
                 DELETE FROM billing_transactions;
+                DELETE FROM daily_visits;
                 """
             )
             for row in snapshot.get("users", []):
                 conn.execute(
-                    "INSERT INTO users (id, email, password, name, role) VALUES (?, ?, ?, ?, ?)",
-                    (row["id"], row["email"], row["password"], row["name"], row["role"]),
+                    "INSERT INTO users (id, email, password, name, role, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+                    (row["id"], row["email"], row["password"], row["name"], row["role"], row.get("created_at", "2026-01-01T00:00:00Z")),
                 )
             for row in snapshot.get("sessions", []):
                 conn.execute(
@@ -401,6 +518,11 @@ class NexraService:
                     "INSERT INTO billing_transactions (id, type, amount, timestamp) VALUES (?, ?, ?, ?)",
                     (row["id"], row["type"], row["amount"], row["timestamp"]),
                 )
+            for row in snapshot.get("daily_visits", []):
+                conn.execute(
+                    "INSERT INTO daily_visits (metric_date, visit_count, anonymous_visit_count) VALUES (?, ?, ?)",
+                    (row["metric_date"], row["visit_count"], row.get("anonymous_visit_count", 0)),
+                )
             conn.commit()
 
     def _save_snapshot(self):
@@ -415,6 +537,7 @@ class NexraService:
                 "skill_review_events": [dict(row) for row in conn.execute("SELECT * FROM skill_review_events").fetchall()],
                 "api_keys": [dict(row) for row in conn.execute("SELECT * FROM api_keys").fetchall()],
                 "billing_transactions": [dict(row) for row in conn.execute("SELECT * FROM billing_transactions").fetchall()],
+                "daily_visits": [dict(row) for row in conn.execute("SELECT * FROM daily_visits").fetchall()],
             }
         self.state_store.save_snapshot(snapshot)
 
@@ -434,6 +557,130 @@ class NexraService:
             self._save_snapshot()
             return
         self.state_store.save_auth_state(self._current_auth_state())
+
+    def _business_state_supported(self):
+        required = ["upsert_skill", "delete_skill", "insert_review", "insert_skill_review_event", "increment_daily_visit"]
+        return all(hasattr(self.state_store, name) for name in required)
+
+    def _persist_skill_state(self, skill):
+        if self._business_state_supported():
+            self.state_store.upsert_skill(skill)
+            return
+        self._save_snapshot()
+
+    def _delete_persisted_skill_state(self, skill_id):
+        if self._business_state_supported():
+            self.state_store.delete_skill(skill_id)
+            return
+        self._save_snapshot()
+
+    def _persist_review_state(self, review):
+        if self._business_state_supported():
+            self.state_store.insert_review(review)
+            return
+        self._save_snapshot()
+
+    def _persist_skill_review_event_state(self, event):
+        if self._business_state_supported():
+            self.state_store.insert_skill_review_event(event)
+            return
+        self._save_snapshot()
+
+    def _persist_visit_state(self, metric_date, anonymous=False):
+        if self._business_state_supported():
+            self.state_store.increment_daily_visit(metric_date, anonymous=anonymous)
+            return
+        self._save_snapshot()
+
+    def _persist_registered_user_state(self, metric_date):
+        if hasattr(self.state_store, "increment_registered_user"):
+            self.state_store.increment_registered_user(metric_date)
+            return
+        self._save_snapshot()
+
+    def _rebuild_metric_tables(self):
+        with self.lock, self.connect() as conn:
+            conn.execute("DELETE FROM metric_totals")
+            conn.execute("DELETE FROM metric_daily")
+
+            users = [dict(row) for row in conn.execute("SELECT email, role, created_at FROM users").fetchall()]
+            daily_registrations = {}
+            registered_users = 0
+            for user in users:
+                if not self._is_counted_registered_user(user):
+                    continue
+                registered_users += 1
+                metric_date = safe_text(user.get("created_at"))[:10]
+                if metric_date:
+                    daily_registrations[metric_date] = daily_registrations.get(metric_date, 0) + 1
+
+            visit_rows = conn.execute(
+                "SELECT metric_date, visit_count, anonymous_visit_count FROM daily_visits ORDER BY metric_date ASC"
+            ).fetchall()
+            total_visits = 0
+            total_anonymous_visits = 0
+            daily_metrics = {}
+            for row in visit_rows:
+                metric_date = safe_text(row["metric_date"])[:10]
+                if not metric_date:
+                    continue
+                visit_count = int(row["visit_count"] or 0)
+                anonymous_visit_count = int(row["anonymous_visit_count"] or 0)
+                total_visits += visit_count
+                total_anonymous_visits += anonymous_visit_count
+                daily_metrics[metric_date] = {
+                    "visits": visit_count,
+                    "anonymousVisits": anonymous_visit_count,
+                }
+
+            for metric_date, registration_count in daily_registrations.items():
+                visit_counts = daily_metrics.get(metric_date, {"visits": 0, "anonymousVisits": 0})
+                conn.execute(
+                    """
+                    INSERT INTO metric_daily (metric_date, registered_users, visits, anonymous_visits)
+                    VALUES (?, ?, ?, ?)
+                    """,
+                    (
+                        metric_date,
+                        registration_count,
+                        int(visit_counts["visits"]),
+                        int(visit_counts["anonymousVisits"]),
+                    ),
+                )
+
+            for metric_date, visit_counts in daily_metrics.items():
+                if metric_date in daily_registrations:
+                    continue
+                conn.execute(
+                    """
+                    INSERT INTO metric_daily (metric_date, registered_users, visits, anonymous_visits)
+                    VALUES (?, 0, ?, ?)
+                    """,
+                    (
+                        metric_date,
+                        int(visit_counts["visits"]),
+                        int(visit_counts["anonymousVisits"]),
+                    ),
+                )
+
+            conn.executemany(
+                "INSERT INTO metric_totals (metric_key, metric_value) VALUES (?, ?)",
+                [
+                    ("registered_users", registered_users),
+                    ("visits", total_visits),
+                    ("anonymous_visits", total_anonymous_visits),
+                ],
+            )
+            conn.commit()
+
+    def _persist_api_key_state(self, api_key):
+        if hasattr(self.state_store, "upsert_api_key"):
+            self.state_store.upsert_api_key(api_key)
+            return
+        self._save_snapshot()
+
+    def _invalidate_dashboard_cache(self):
+        self._dashboard_cache = None
 
     def _persist_auth_session(self, token, user_id, created_at):
         if self._auth_state_supported() and hasattr(self.state_store, "upsert_auth_session"):
@@ -472,8 +719,8 @@ class NexraService:
             conn.execute("DELETE FROM users")
             for row in users:
                 conn.execute(
-                    "INSERT INTO users (id, email, password, name, role) VALUES (?, ?, ?, ?, ?)",
-                    (row["id"], row["email"], row["password"], row["name"], row["role"]),
+                    "INSERT INTO users (id, email, password, name, role, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+                    (row["id"], row["email"], row["password"], row["name"], row["role"], row.get("created_at", "2026-01-01T00:00:00Z")),
                 )
             for row in sessions:
                 conn.execute(
@@ -507,8 +754,8 @@ class NexraService:
             if users:
                 for row in users:
                     conn.execute(
-                        "INSERT INTO users (id, email, password, name, role) VALUES (?, ?, ?, ?, ?)",
-                        (row["id"], row["email"], row["password"], row["name"], row["role"]),
+                        "INSERT INTO users (id, email, password, name, role, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+                        (row["id"], row["email"], row["password"], row["name"], row["role"], row.get("created_at", "2026-01-01T00:00:00Z")),
                     )
                 for row in sessions:
                     conn.execute(
@@ -523,7 +770,6 @@ class NexraService:
             else:
                 self._seed_default_users(conn)
             conn.commit()
-        self._save_auth_state()
         log.info("Initialized auth-only runtime. users=%s sessions=%s verifications=%s", len(users) or 3, len(sessions), len(verifications))
 
     def _sync_user_from_auth_state(self, user_id: str):
@@ -535,8 +781,8 @@ class NexraService:
                 continue
             with self.lock, self.connect() as conn:
                 conn.execute(
-                    "INSERT OR REPLACE INTO users (id, email, password, name, role) VALUES (?, ?, ?, ?, ?)",
-                    (row["id"], row["email"], row["password"], row["name"], row["role"]),
+                    "INSERT OR REPLACE INTO users (id, email, password, name, role, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+                    (row["id"], row["email"], row["password"], row["name"], row["role"], row.get("created_at", "2026-01-01T00:00:00Z")),
                 )
                 conn.commit()
             return row
@@ -578,11 +824,14 @@ class NexraService:
             if imported_ids:
                 for skill_id in imported_ids:
                     conn.execute("DELETE FROM reviews WHERE skill_id = ?", (skill_id,))
+                    conn.execute("DELETE FROM skill_review_events WHERE skill_id = ?", (skill_id,))
                     conn.execute("DELETE FROM skill_functions WHERE skill_id = ?", (skill_id,))
                     conn.execute("DELETE FROM skills WHERE id = ?", (skill_id,))
             self._insert_skills(conn, imported_skills)
             conn.commit()
-            self._save_snapshot()
+        self._save_catalog_state()
+        self._invalidate_skill_cache()
+        self._invalidate_dashboard_cache()
         log.info(
             "Replaced imported skill catalog. removed=%s added=%s",
             len(imported_ids),
@@ -731,8 +980,12 @@ class NexraService:
                 (email, code, expires_at, created_at),
             )
             conn.commit()
-        self._save_auth_state()
-        return {"email": email, "code": code, "expires_at": expires_at, "created_at": created_at}
+        verification = {"email": email, "code": code, "expires_at": expires_at, "created_at": created_at}
+        if self._auth_state_supported() and hasattr(self.state_store, "upsert_email_verification"):
+            self.state_store.upsert_email_verification(verification)
+        else:
+            self._save_auth_state()
+        return verification
 
     def _load_email_verification(self, email: str):
         with self.connect() as conn:
@@ -746,7 +999,10 @@ class NexraService:
         with self.lock, self.connect() as conn:
             conn.execute("DELETE FROM email_verifications WHERE email = ?", (email,))
             conn.commit()
-        self._save_auth_state()
+        if self._auth_state_supported() and hasattr(self.state_store, "delete_email_verification"):
+            self.state_store.delete_email_verification(email)
+        else:
+            self._save_auth_state()
 
     def request_register_code(self, payload):
         email = safe_text(payload.get("email")).strip().lower()
@@ -820,18 +1076,36 @@ class NexraService:
                 log.warning("Registration rejected for duplicate email. email=%s", email)
                 raise ApiError(400, "This email is already registered.")
             user_id = "user_" + uuid.uuid4().hex[:8]
+            created_at = now_iso()
             conn.execute(
-                "INSERT INTO users (id, email, password, name, role) VALUES (?, ?, ?, ?, ?)",
-                (user_id, email, password, name, "USER"),
+                "INSERT INTO users (id, email, password, name, role, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+                (user_id, email, password, name, "USER", created_at),
+            )
+            metric_date = created_at[:10]
+            conn.execute(
+                """
+                INSERT INTO metric_totals (metric_key, metric_value)
+                VALUES ('registered_users', 1)
+                ON CONFLICT(metric_key) DO UPDATE SET metric_value = metric_value + 1
+                """
+            )
+            conn.execute(
+                """
+                INSERT INTO metric_daily (metric_date, registered_users, visits, anonymous_visits)
+                VALUES (?, 1, 0, 0)
+                ON CONFLICT(metric_date) DO UPDATE SET registered_users = registered_users + 1
+                """,
+                (metric_date,),
             )
             conn.commit()
             self._persist_auth_user(
-                {"id": user_id, "email": email, "password": password, "name": name, "role": "USER"}
+                {"id": user_id, "email": email, "password": password, "name": name, "role": "USER", "created_at": created_at}
             )
             token = self._issue_auth_token(user_id)
+        self._persist_registered_user_state(metric_date)
         self._delete_email_verification(email)
         log.info("User registered. userId=%s, email=%s", user_id, email)
-        return {"token": token, "user": self._user_response({"id": user_id, "name": name, "email": email, "role": "USER"})}
+        return {"token": token, "user": self._user_response({"id": user_id, "name": name, "email": email, "role": "USER", "created_at": created_at})}
 
     def logout(self, authorization):
         token = self.extract_bearer_token(authorization)
@@ -849,6 +1123,9 @@ class NexraService:
         return {"message": "Logged out."}
 
     def get_dashboard(self):
+        now_ts = datetime.utcnow().timestamp()
+        if self._dashboard_cache and (now_ts - self._dashboard_cache["timestamp"]) < self._dashboard_cache_ttl_seconds:
+            return self._dashboard_cache["payload"]
         skills = self._fetch_all_skills()
         approved = [skill for skill in skills if skill["status"].lower() == "active" and skill["approvalStatus"].upper() == "APPROVED"]
         pending = [skill for skill in skills if skill["approvalStatus"].upper() == "PENDING"]
@@ -859,7 +1136,7 @@ class NexraService:
             for skill in sorted(approved, key=lambda item: self.recommendation_score(item, "", ""), reverse=True)[:3]
         ]
         searchable_functions = len({function_name for skill in skills for function_name in skill["functions"]})
-        return {
+        payload = {
             "totalIndexedSkills": len(skills),
             "approvedSkills": len(approved),
             "pendingSkills": len(pending),
@@ -871,6 +1148,116 @@ class NexraService:
             "averageLatencyP95": round(sum(skill["latencyP95"] for skill in skills) / max(len(skills), 1)),
             "averageCostEfficiency": round(sum(skill["costEfficiency"] for skill in skills) / max(len(skills), 1)),
             "topSkills": top_skills,
+        }
+        self._dashboard_cache = {"timestamp": now_ts, "payload": payload}
+        return payload
+
+    def record_visit(self, authorization=None):
+        metric_date = datetime.utcnow().date().isoformat()
+        anonymous = True
+        if authorization:
+            try:
+                self.auth_user_id(authorization)
+                anonymous = False
+            except ApiError:
+                anonymous = True
+        with self.lock, self.connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO daily_visits (metric_date, visit_count, anonymous_visit_count)
+                VALUES (?, 1, ?)
+                ON CONFLICT(metric_date) DO UPDATE SET
+                    visit_count = visit_count + 1,
+                    anonymous_visit_count = anonymous_visit_count + excluded.anonymous_visit_count
+                """,
+                (metric_date, 1 if anonymous else 0),
+            )
+            conn.execute(
+                """
+                INSERT INTO metric_totals (metric_key, metric_value)
+                VALUES ('visits', 1)
+                ON CONFLICT(metric_key) DO UPDATE SET metric_value = metric_value + 1
+                """
+            )
+            if anonymous:
+                conn.execute(
+                    """
+                    INSERT INTO metric_totals (metric_key, metric_value)
+                    VALUES ('anonymous_visits', 1)
+                    ON CONFLICT(metric_key) DO UPDATE SET metric_value = metric_value + 1
+                    """
+                )
+            conn.execute(
+                """
+                INSERT INTO metric_daily (metric_date, registered_users, visits, anonymous_visits)
+                VALUES (?, 0, 1, ?)
+                ON CONFLICT(metric_date) DO UPDATE SET
+                    visits = visits + 1,
+                    anonymous_visits = anonymous_visits + excluded.anonymous_visits
+                """,
+                (metric_date, 1 if anonymous else 0),
+            )
+            conn.commit()
+        self._persist_visit_state(metric_date, anonymous=anonymous)
+        log.info("Platform visit recorded. metricDate=%s anonymous=%s", metric_date, anonymous)
+        return {"message": "Visit recorded.", "date": metric_date, "anonymous": anonymous}
+
+    def _auth_users_for_metrics(self):
+        with self.connect() as conn:
+            return [dict(row) for row in conn.execute("SELECT * FROM users ORDER BY id ASC").fetchall()]
+
+    def _is_counted_registered_user(self, user):
+        email = safe_text(user.get("email")).strip().lower()
+        role = safe_text(user.get("role")).strip().upper()
+        return role == "USER" and not email.endswith("@nexra.local")
+
+    def get_admin_metrics(self, authorization, days=7, page=0):
+        self.require_admin(authorization)
+        if hasattr(self.state_store, "get_catalog_metrics"):
+            return self.state_store.get_catalog_metrics(days, page)
+        page_size = min(max(int(days or 7), 1), 7)
+        safe_page = max(int(page or 0), 0)
+        with self.connect() as conn:
+            total_rows = conn.execute(
+                "SELECT metric_key, metric_value FROM metric_totals ORDER BY metric_key ASC"
+            ).fetchall()
+            totals = {row["metric_key"]: int(row["metric_value"] or 0) for row in total_rows}
+            total_items = int(
+                conn.execute("SELECT COUNT(*) AS count FROM metric_daily").fetchone()["count"] or 1
+            )
+            total_pages = max(math.ceil(total_items / page_size), 1)
+            safe_page = min(safe_page, total_pages - 1)
+            rows = conn.execute(
+                """
+                SELECT metric_date, registered_users, visits, anonymous_visits
+                FROM metric_daily
+                ORDER BY metric_date DESC
+                LIMIT ? OFFSET ?
+                """,
+                (page_size, safe_page * page_size),
+            ).fetchall()
+        series = [
+            {
+                "date": row["metric_date"],
+                "registrations": int(row["registered_users"] or 0),
+                "visits": int(row["visits"] or 0),
+                "anonymousVisits": int(row["anonymous_visits"] or 0),
+            }
+            for row in rows
+        ]
+
+        return {
+            "totals": {
+                "registeredUsers": int(totals.get("registered_users", 0)),
+                "visits": int(totals.get("visits", 0)),
+                "anonymousVisits": int(totals.get("anonymous_visits", 0)),
+            },
+            "daily": series,
+            "days": page_size,
+            "page": safe_page,
+            "pageSize": page_size,
+            "totalItems": total_items,
+            "totalPages": total_pages,
         }
 
     def get_welcome(self, frontend_origin=None, api_base_url=None):
@@ -1015,6 +1402,15 @@ class NexraService:
         timestamp = datetime.now().date().isoformat()
         new_count = skill["userRatingCount"] + 1
         new_avg = ((skill["userRatingAvg"] * skill["userRatingCount"]) + rating) / new_count
+        review = {
+            "id": review_id,
+            "skill_id": skill_id,
+            "user_id": user_id,
+            "author": user["name"],
+            "rating": rating,
+            "comment": comment,
+            "timestamp": timestamp,
+        }
         with self.lock, self.connect() as conn:
             conn.execute(
                 "INSERT INTO reviews (id, skill_id, user_id, author, rating, comment, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -1025,7 +1421,15 @@ class NexraService:
                 (new_avg, new_count, skill_id),
             )
             conn.commit()
-            self._save_snapshot()
+        updated_skill = {
+            **skill,
+            "userRatingAvg": new_avg,
+            "userRatingCount": new_count,
+        }
+        self._persist_review_state(review)
+        self._persist_skill_state(updated_skill)
+        self._invalidate_skill_cache()
+        self._invalidate_dashboard_cache()
         log.info(
             "Review submitted. skillId=%s, userId=%s, rating=%s, newUserRatingAvg=%s, newUserRatingCount=%s",
             skill_id,
@@ -1080,7 +1484,9 @@ class NexraService:
         with self.lock, self.connect() as conn:
             self._insert_skill(conn, skill)
             conn.commit()
-            self._save_snapshot()
+        self._persist_skill_state(skill)
+        self._invalidate_skill_cache()
+        self._invalidate_dashboard_cache()
         log.info(
             "Skill submitted. skillId=%s, submittedBy=%s, category=%s, approvalStatus=%s",
             skill_id,
@@ -1120,7 +1526,9 @@ class NexraService:
         with self.lock, self.connect() as conn:
             self._insert_skill(conn, updated)
             conn.commit()
-            self._save_snapshot()
+        self._persist_skill_state(updated)
+        self._invalidate_skill_cache()
+        self._invalidate_dashboard_cache()
         log.info(
             "Skill updated by submitter. skillId=%s, userId=%s, approvalStatus=%s",
             skill_id,
@@ -1141,22 +1549,31 @@ class NexraService:
 
     def _record_skill_review_event(self, conn, skill_id, reviewer, result, note=""):
         timestamp = datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
+        event = {
+            "id": "sre_" + uuid.uuid4().hex[:10],
+            "skillId": skill_id,
+            "reviewerUserId": reviewer["id"],
+            "reviewerName": reviewer["name"],
+            "result": result,
+            "note": safe_text(note).strip(),
+            "timestamp": timestamp,
+        }
         conn.execute(
             """
             INSERT INTO skill_review_events (id, skill_id, reviewer_user_id, reviewer_name, result, note, timestamp)
             VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
             (
-                "sre_" + uuid.uuid4().hex[:10],
+                event["id"],
                 skill_id,
                 reviewer["id"],
                 reviewer["name"],
                 result,
-                safe_text(note).strip(),
+                event["note"],
                 timestamp,
             ),
         )
-        return timestamp
+        return event
 
     def _skill_review_history_map(self, conn):
         history = {}
@@ -1239,19 +1656,38 @@ class NexraService:
             row = conn.execute("SELECT * FROM skills WHERE id = ?", (skill_id,)).fetchone()
             if row is None:
                 raise ApiError(404, f"Skill not found: {skill_id}")
-            reviewed_at = self._record_skill_review_event(conn, skill_id, admin, "APPROVED")
+            function_rows = conn.execute(
+                "SELECT function_name FROM skill_functions WHERE skill_id = ? ORDER BY function_order",
+                (skill_id,),
+            ).fetchall()
+            event = self._record_skill_review_event(conn, skill_id, admin, "APPROVED")
             conn.execute(
                 """
                 UPDATE skills
                 SET approval_status = 'APPROVED', status = 'active', reviewed_at = ?, reviewed_by = ?, review_result = 'APPROVED'
                 WHERE id = ?
                 """,
-                (reviewed_at, admin["name"], skill_id),
+                (event["timestamp"], admin["name"], skill_id),
             )
             conn.commit()
-            self._save_snapshot()
+        existing_skill = self._skill_from_row(dict(row), [item["function_name"] for item in function_rows])
+        updated_skill = {
+            **existing_skill,
+            "approvalStatus": "APPROVED",
+            "status": "active",
+            "reviewedAt": event["timestamp"],
+            "reviewedBy": admin["name"],
+            "reviewResult": "APPROVED",
+        }
+        if hasattr(self.state_store, "persist_skill_review_event_and_skill"):
+            self.state_store.persist_skill_review_event_and_skill(event, updated_skill)
+        else:
+            self._persist_skill_review_event_state(event)
+            self._persist_skill_state(updated_skill)
+        self._invalidate_skill_cache()
+        self._invalidate_dashboard_cache()
         log.info("Skill approved. skillId=%s, adminUserId=%s", skill_id, admin["id"])
-        return self._skill_response(self._find_skill(skill_id), "", "")
+        return self._skill_response(updated_skill, "", "")
 
     def reject_skill(self, authorization, skill_id):
         admin = self.require_admin(authorization)
@@ -1259,19 +1695,38 @@ class NexraService:
             row = conn.execute("SELECT * FROM skills WHERE id = ?", (skill_id,)).fetchone()
             if row is None:
                 raise ApiError(404, f"Skill not found: {skill_id}")
-            reviewed_at = self._record_skill_review_event(conn, skill_id, admin, "REJECTED")
+            function_rows = conn.execute(
+                "SELECT function_name FROM skill_functions WHERE skill_id = ? ORDER BY function_order",
+                (skill_id,),
+            ).fetchall()
+            event = self._record_skill_review_event(conn, skill_id, admin, "REJECTED")
             conn.execute(
                 """
                 UPDATE skills
                 SET approval_status = 'REJECTED', status = 'draft', reviewed_at = ?, reviewed_by = ?, review_result = 'REJECTED'
                 WHERE id = ?
                 """,
-                (reviewed_at, admin["name"], skill_id),
+                (event["timestamp"], admin["name"], skill_id),
             )
             conn.commit()
-            self._save_snapshot()
+        existing_skill = self._skill_from_row(dict(row), [item["function_name"] for item in function_rows])
+        updated_skill = {
+            **existing_skill,
+            "approvalStatus": "REJECTED",
+            "status": "draft",
+            "reviewedAt": event["timestamp"],
+            "reviewedBy": admin["name"],
+            "reviewResult": "REJECTED",
+        }
+        if hasattr(self.state_store, "persist_skill_review_event_and_skill"):
+            self.state_store.persist_skill_review_event_and_skill(event, updated_skill)
+        else:
+            self._persist_skill_review_event_state(event)
+            self._persist_skill_state(updated_skill)
+        self._invalidate_skill_cache()
+        self._invalidate_dashboard_cache()
         log.info("Skill rejected. skillId=%s, adminUserId=%s", skill_id, admin["id"])
-        return self._skill_response(self._find_skill(skill_id), "", "")
+        return self._skill_response(updated_skill, "", "")
 
     def admin_update_skill(self, authorization, skill_id, payload):
         admin = self.require_admin(authorization)
@@ -1301,20 +1756,28 @@ class NexraService:
             "operatingSystem": self.default_text(payload.get("operatingSystem"), skill["operatingSystem"]),
         }
         with self.lock, self.connect() as conn:
+            review_event = None
             if updated["approvalStatus"] != skill["approvalStatus"]:
-                reviewed_at = self._record_skill_review_event(conn, skill_id, admin, updated["approvalStatus"])
-                updated["reviewedAt"] = reviewed_at
+                review_event = self._record_skill_review_event(conn, skill_id, admin, updated["approvalStatus"])
+                updated["reviewedAt"] = review_event["timestamp"]
                 updated["reviewedBy"] = admin["name"]
                 updated["reviewResult"] = updated["approvalStatus"]
             elif updated["status"] != skill["status"] and updated["approvalStatus"] == "APPROVED":
                 action = "REPUBLISHED" if updated["status"] == "active" else "UNPUBLISHED"
-                reviewed_at = self._record_skill_review_event(conn, skill_id, admin, action)
-                updated["reviewedAt"] = reviewed_at
+                review_event = self._record_skill_review_event(conn, skill_id, admin, action)
+                updated["reviewedAt"] = review_event["timestamp"]
                 updated["reviewedBy"] = admin["name"]
                 updated["reviewResult"] = updated["approvalStatus"]
             self._insert_skill(conn, updated)
             conn.commit()
-            self._save_snapshot()
+        if review_event and hasattr(self.state_store, "persist_skill_review_event_and_skill"):
+            self.state_store.persist_skill_review_event_and_skill(review_event, updated)
+        else:
+            if review_event:
+                self._persist_skill_review_event_state(review_event)
+            self._persist_skill_state(updated)
+        self._invalidate_skill_cache()
+        self._invalidate_dashboard_cache()
         log.info(
             "Skill updated by admin. skillId=%s, adminUserId=%s, approvalStatus=%s, status=%s",
             skill_id,
@@ -1328,10 +1791,13 @@ class NexraService:
         admin = self.require_admin(authorization)
         with self.lock, self.connect() as conn:
             conn.execute("DELETE FROM reviews WHERE skill_id = ?", (skill_id,))
+            conn.execute("DELETE FROM skill_review_events WHERE skill_id = ?", (skill_id,))
             conn.execute("DELETE FROM skill_functions WHERE skill_id = ?", (skill_id,))
             conn.execute("DELETE FROM skills WHERE id = ?", (skill_id,))
             conn.commit()
-            self._save_snapshot()
+        self._delete_persisted_skill_state(skill_id)
+        self._invalidate_skill_cache()
+        self._invalidate_dashboard_cache()
         log.warning("Skill deleted by admin. skillId=%s, adminUserId=%s", skill_id, admin["id"])
         return {"message": "Deleted."}
 
@@ -1411,11 +1877,11 @@ class NexraService:
                 (key["id"], key["name"], key["scope"], key["last_used"], key["status"]),
             )
             conn.commit()
-            self._save_snapshot()
+        self._persist_api_key_state(key)
         log.info("API key created. name=%s, scope=%s, keyId=%s", key["name"], key["scope"], key["id"])
         return self._api_key_response(key)
 
-    def _fetch_all_skills(self):
+    def _load_all_skills_from_db(self):
         with self.connect() as conn:
             rows = [dict(row) for row in conn.execute("SELECT * FROM skills").fetchall()]
             functions_rows = conn.execute(
@@ -1457,14 +1923,63 @@ class NexraService:
             )
         return skills
 
+    def _fetch_all_skills(self):
+        if self._skill_cache is None:
+            skills = self._load_all_skills_from_db()
+            self._skill_cache = skills
+            self._skill_cache_by_id = {skill["id"]: skill for skill in skills}
+        return [self._copy_skill(skill) for skill in self._skill_cache]
+
+    def _skill_from_row(self, row, functions):
+        return {
+            "id": row["id"],
+            "name": row["name"],
+            "category": row["category"],
+            "description": row["description"],
+            "pricePerCall": row["price_per_call"],
+            "status": row["status"],
+            "successRate": row["success_rate"],
+            "latencyP95": row["latency_p95"],
+            "costEfficiency": row["cost_efficiency"],
+            "userRatingAvg": row["user_rating_avg"],
+            "userRatingCount": row["user_rating_count"],
+            "recentCalls": row["recent_calls"],
+            "functions": functions,
+            "invocationMethod": row["invocation_method"],
+            "submittedBy": row["submitted_by"],
+            "approvalStatus": row["approval_status"],
+            "submittedAt": row.get("submitted_at"),
+            "reviewedAt": row.get("reviewed_at"),
+            "reviewedBy": row.get("reviewed_by"),
+            "reviewResult": row.get("review_result"),
+            "source": row["source"],
+            "sourceUrl": row["source_url"],
+            "sourceAuthor": row["source_author"],
+            "license": row["license"],
+            "operatingSystem": row["operating_system"],
+        }
+
+    def _fetch_skill_by_id(self, skill_id):
+        skills_by_id = self._skill_cache_by_id
+        if skills_by_id is None:
+            self._fetch_all_skills()
+            skills_by_id = self._skill_cache_by_id or {}
+        skill = skills_by_id.get(skill_id)
+        if skill is None:
+            raise ApiError(404, f"Skill not found: {skill_id}")
+        return self._copy_skill(skill)
+
     def _find_skill(self, skill_id):
-        for skill in self._fetch_all_skills():
-            if skill["id"] == skill_id:
-                return skill
-        raise ApiError(404, f"Skill not found: {skill_id}")
+        return self._fetch_skill_by_id(skill_id)
 
     def _user_response(self, user):
-        return {"id": user["id"], "name": user["name"], "email": user["email"], "role": user["role"]}
+        return {
+            "id": user["id"],
+            "name": user["name"],
+            "email": user["email"],
+            "role": user["role"],
+            "createdAt": user.get("created_at"),
+        }
 
     def _review_response(self, review):
         return {

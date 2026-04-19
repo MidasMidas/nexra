@@ -18,7 +18,6 @@ Nexra 是一个面向 AI Agent 的 skill 搜索、评分与推荐平台。当前
 - 查看 provider 文档、鉴权要求和调用示例
 - 提交新 skill
 - 给 skill 打分和写评论
-- 管理员审核 skill
 
 ## 4. 注册与登录
 
@@ -110,26 +109,7 @@ GET /api/skills?function=report&page=0&pageSize=5
 - 普通用户可以给 skill 打分和评论
 - 个人中心可以查看自己提交过的 skill 和评分记录
 
-## 8. 管理员接口
-
-- `GET /api/admin/skills?status=PENDING|APPROVED|REJECTED&q=&page=&pageSize=`
-- `POST /api/admin/skills/{id}/approve`
-- `POST /api/admin/skills/{id}/reject`
-- `PUT /api/admin/skills/{id}`
-- `DELETE /api/admin/skills/{id}`
-- `GET /api/admin/skills/sync/status`
-- `POST /api/admin/skills/sync`
-
-管理员可以：
-
-- 在 Admin 页面按 `Pending`、`Approved`、`Rejected` 三个子页面查看 skill
-- 按状态搜索 skill，并分页浏览结果
-- 审核普通用户提交的 skill，支持 `approve` 和 `reject`
-- 修改 skill 评分和详细信息
-- 删除 skill
-- 手动触发 skill 同步
-
-## 9. 评分系统
+## 8. 评分系统
 
 每个 skill 都有三类核心分值：
 
@@ -137,7 +117,7 @@ GET /api/skills?function=report&page=0&pageSize=5
 - `agentScore`：系统自动评分
 - `overallTrust`：综合信任分
 
-## 10. 邮箱验证码说明
+## 9. 邮箱验证码说明
 
 当前平台使用 Resend 发送注册验证码。
 
@@ -153,7 +133,7 @@ GET /api/skills?function=report&page=0&pageSize=5
 - 在 Resend 验证你自己的域名
 - 把发件地址改成该域名下的邮箱，例如 `Nexra <no-reply@yourdomain.com>`
 
-## 11. 公开接口总览
+## 10. 公开接口总览
 
 - `GET /api`
 - `GET /api/agent-guide`
@@ -167,10 +147,3 @@ GET /api/skills?function=report&page=0&pageSize=5
 - `POST /api/skills/{id}/reviews`
 - `POST /api/skills/submissions`
 - `GET /api/users/me`
-- `GET /api/admin/skills?status=PENDING|APPROVED|REJECTED&q=&page=&pageSize=`
-- `POST /api/admin/skills/{id}/approve`
-- `POST /api/admin/skills/{id}/reject`
-- `PUT /api/admin/skills/{id}`
-- `DELETE /api/admin/skills/{id}`
-- `GET /api/admin/skills/sync/status`
-- `POST /api/admin/skills/sync`

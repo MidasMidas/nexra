@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 from http.server import BaseHTTPRequestHandler
 from urllib.parse import parse_qs, urlparse
 
@@ -7,6 +8,72 @@ from app.common.errors import ApiError
 
 
 log = logging.getLogger("nexra-python")
+
+
+def allowed_origin(request_origin: str):
+    configured = os.getenv("NEXRA_CORS_ALLOW_ORIGINS", "").strip()
+    if not configured:
+        return "*"
+    allowed = [item.strip() for item in configured.split(",") if item.strip()]
+    if not allowed:
+        return "*"
+    if "*" in allowed:
+        return "*"
+    if request_origin in allowed:
+        return request_origin
+    return allowed[0]
+
+
+def build_welcome_payload(frontend_origin: str, api_base_url: str):
+    agent_guide_url = f"{api_base_url.rstrip('/')}/agent-guide"
+    return {
+        "productName": "Nexra",
+        "headline": "Find the right skill before your agent calls it",
+        "summary": "Nexra helps your agent search, compare, and evaluate external skills with trust signals, recommendation scores, and clear calling guidance.",
+        "steps": [
+            "Search the marketplace by keyword or capability.",
+            "Compare recommendation score, trust score, price, and calling method.",
+            "Open a skill detail page to read provider docs and calling notes.",
+            "Let your own agent call the external skill directly and come back to Nexra for feedback.",
+        ],
+        "capabilities": [
+            "Search and recommendation for agent-ready skills",
+            "Dual scoring with user rating and system rating",
+            "Moderation, governance, and calling guidance in one place",
+        ],
+        "frontendUrl": frontend_origin,
+        "agentGuideUrl": agent_guide_url,
+    }
+
+
+def build_agent_guide_payload(api_base_url: str):
+    api_base = api_base_url.rstrip("/")
+    return {
+        "name": "Nexra Agent Guide",
+        "goal": "Help any AI agent discover, choose, and call external skills correctly.",
+        "invokeEndpoint": "/api/skills and /api/skills/{id}",
+        "workflow": [
+            "Fetch available skills from GET /api/skills.",
+            "Compare recommendationScore, overallTrust, userRatingAvg, systemScore, and pricePerCall.",
+            "Select the best skill for the task and read its provider docs.",
+            "Use GET /api/skills/{id} for deeper trust, calling notes, and review context.",
+            "Call the chosen skill directly from your own agent runtime.",
+            "After a human sees the result, submit feedback to POST /api/skills/{id}/reviews.",
+        ],
+        "rules": [
+            "Prefer higher recommendationScore when the capability match is strong.",
+            "Use overallTrust as a blended quality signal.",
+            "Use userRatingAvg to estimate human satisfaction.",
+            "Use systemScore to estimate operational reliability.",
+            "Treat provider documentation as the source of truth for external invocation details.",
+        ],
+        "exampleCall": {
+            "method": "GET",
+            "endpoint": f"{api_base}/skills?q=image&function=ocr&page=0&pageSize=5",
+            "contentType": "application/json",
+            "payload": "{\"note\":\"Choose a skill from the search results, then call the provider directly.\"}",
+        },
+    }
 
 
 def create_handler(app):
@@ -53,13 +120,15 @@ def create_handler(app):
                 # Logout is client-driven in the current stateless token model.
                 # Return immediately so sign-out is not blocked by service cold starts.
                 return {"message": "Logged out."}
-            current_app = self._app(method, path)
             if method == "GET" and path == "/api":
-                return current_app.get_welcome(self._request_origin(), self._api_base_url())
+                return build_welcome_payload(self._request_origin(), self._api_base_url())
             if method == "GET" and path == "/api/agent-guide":
-                return current_app.get_agent_guide(self._request_origin(), self._api_base_url())
+                return build_agent_guide_payload(self._api_base_url())
+            current_app = self._app(method, path)
             if method == "GET" and path == "/api/dashboard":
                 return current_app.get_dashboard()
+            if method == "POST" and path == "/api/analytics/visit":
+                return current_app.record_visit(auth)
             if method == "POST" and path == "/api/auth/login":
                 return current_app.login(payload or {})
             if method == "POST" and path == "/api/auth/register/request-code":
@@ -105,6 +174,12 @@ def create_handler(app):
                     search=query.get("q", ""),
                     page=int(query.get("page", "0")),
                     page_size=int(query.get("pageSize", "10")),
+                )
+            if method == "GET" and path == "/api/admin/metrics":
+                return current_app.get_admin_metrics(
+                    auth,
+                    days=int(query.get("days", "7")),
+                    page=int(query.get("page", "0")),
                 )
             if method == "GET" and path == "/api/admin/skills/pending":
                 return current_app.get_pending_skills(auth)
@@ -153,11 +228,13 @@ def create_handler(app):
             return f"{self._request_origin()}/api"
 
         def _write_headers(self, content_length=0):
+            request_origin = self.headers.get("Origin", "")
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Content-Length", str(content_length))
-            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Access-Control-Allow-Origin", allowed_origin(request_origin))
             self.send_header("Access-Control-Allow-Headers", "Authorization, Content-Type")
             self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+            self.send_header("Vary", "Origin")
 
         def log_message(self, fmt, *args):
             log.info("%s - %s", self.address_string(), fmt % args)

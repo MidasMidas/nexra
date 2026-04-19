@@ -26,6 +26,14 @@ class EmailService:
             return value.strip()
         return value
 
+    def _request_timeout_seconds(self):
+        raw_value = self._value("EMAIL_HTTP_TIMEOUT_SECONDS", "6")
+        try:
+            timeout = float(raw_value)
+        except (TypeError, ValueError):
+            timeout = 6.0
+        return max(2.0, timeout)
+
     def _resend_headers(self):
         api_key = self._value("RESEND_API_KEY")
         if not api_key:
@@ -33,21 +41,25 @@ class EmailService:
         return {
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
-            "User-Agent": "Nexra/1.0 (+https://nexra-one.vercel.app)",
+            "Accept": "application/json",
+            "User-Agent": "Nexra/1.0 (+https://nexracat.com)",
         }
 
     def is_configured(self):
-        return bool(self._resend_headers() or (self._value("SMTP_HOST") and self._value("SMTP_USER") and self._value("SMTP_PASSWORD")))
+        return bool(
+            self._resend_headers()
+            or (self._value("SMTP_HOST") and self._value("SMTP_USER") and self._value("SMTP_PASSWORD"))
+        )
 
     def _message_content(self, code: str, language: str):
         if language == "zh":
             return {
-                "subject": "Nexra 注册验证码",
+                "subject": "Nexra ?????",
                 "text": (
-                    "你好，\n\n"
-                    f"你的 Nexra 注册验证码是：{code}\n"
-                    "验证码 10 分钟内有效。\n\n"
-                    "如果这不是你的操作，请忽略这封邮件。"
+                    "???\n\n"
+                    f"?? Nexra ???????{code}\n"
+                    "????? 10 ??????\n\n"
+                    "???????????????????"
                 ),
             }
         return {
@@ -75,7 +87,7 @@ class EmailService:
         ).encode("utf-8")
         req = request.Request("https://api.resend.com/emails", data=payload, headers=headers, method="POST")
         try:
-            with request.urlopen(req, timeout=20) as response:
+            with request.urlopen(req, timeout=self._request_timeout_seconds()) as response:
                 if response.status >= 300:
                     raise RuntimeError("Resend email delivery failed.")
         except error.HTTPError as exc:
@@ -88,6 +100,9 @@ class EmailService:
             except json.JSONDecodeError:
                 pass
             raise RuntimeError(f"Resend email delivery failed: {message}") from exc
+        except Exception as exc:
+            log.error("Resend email delivery request failed. email=%s error=%s", email, exc)
+            raise RuntimeError(f"Resend email delivery failed: {exc}") from exc
         log.info("Verification email sent through Resend. email=%s", email)
         return True
 
@@ -98,6 +113,7 @@ class EmailService:
         username = self._value("SMTP_USER")
         password = self._value("SMTP_PASSWORD")
         use_tls = self._value("SMTP_USE_TLS", "true").strip().lower() != "false"
+        timeout = self._request_timeout_seconds()
 
         message = EmailMessage()
         message["From"] = from_address
@@ -106,11 +122,11 @@ class EmailService:
         message.set_content(content["text"])
 
         if port == 465 and use_tls:
-            with smtplib.SMTP_SSL(host, port, timeout=20) as server:
+            with smtplib.SMTP_SSL(host, port, timeout=timeout) as server:
                 server.login(username, password)
                 server.send_message(message)
         else:
-            with smtplib.SMTP(host, port, timeout=20) as server:
+            with smtplib.SMTP(host, port, timeout=timeout) as server:
                 if use_tls:
                     server.starttls()
                 server.login(username, password)

@@ -98,6 +98,8 @@ const copy = {
     pythonTitle: "Python example",
     jsTitle: "JavaScript example",
     dashboardCurrentBalance: "Indexed skills",
+    loadingTitle: "Loading Nexra",
+    loadingCopy: "Loading homepage data. Please wait...",
     dashboardCurrentBalanceMeta: "Current searchable marketplace inventory",
     dashboardActiveSkills: "Approved skills",
     dashboardActiveSkillsMeta: "Approved and visible to agents",
@@ -219,7 +221,14 @@ const copy = {
     adminPageSize: "Page size",
     adminPage: "Page",
     adminTotal: "Total",
-    errorsTitle: "Common errors",
+    adminMetricsTitle: "Platform metrics",
+    adminMetricsUsers: "Registered users",
+    adminMetricsVisits: "Visits",
+    adminMetricsAnonymousVisits: "Anonymous visits",
+    adminMetricsDaily: "Daily activity",
+    adminMetricsDate: "Date",
+    adminMetricsNoData: "No daily activity yet.",
+  errorsTitle: "Common errors",
     error1: "Backend not running: start Nexra and confirm {apiBase}/api/dashboard returns data.",
     error2: "Skill not found: your agent requested an invalid skill id.",
     error3: "Validation error: review payload must include author and a rating from 1 to 5.",
@@ -318,6 +327,8 @@ const copy = {
     pythonTitle: "Python \u793a\u4f8b",
     jsTitle: "JavaScript \u793a\u4f8b",
     dashboardCurrentBalance: "\u5df2\u7d22\u5f15 skill \u6570",
+    loadingTitle: "\u6b63\u5728\u52a0\u8f7d Nexra",
+    loadingCopy: "\u9996\u9875\u6570\u636e\u52a0\u8f7d\u4e2d\uff0c\u8bf7\u7a0d\u5019...",
     dashboardCurrentBalanceMeta: "\u5f53\u524d\u53ef\u641c\u7d22\u7684 marketplace \u5e93",
     dashboardActiveSkills: "\u5df2\u6279\u51c6 skill",
     dashboardActiveSkillsMeta: "\u5df2\u901a\u8fc7\u5ba1\u6838\uff0cAgent \u53ef\u89c1",
@@ -439,7 +450,14 @@ const copy = {
     adminPageSize: "\u6bcf\u9875\u6570\u91cf",
     adminPage: "\u9875\u7801",
     adminTotal: "\u603b\u6570",
-    errorsTitle: "\u5e38\u89c1\u9519\u8bef",
+    adminMetricsTitle: "\u5e73\u53f0\u7edf\u8ba1",
+    adminMetricsUsers: "\u6ce8\u518c\u7528\u6237\u6570",
+    adminMetricsVisits: "\u8bbf\u95ee\u91cf",
+    adminMetricsAnonymousVisits: "\u533f\u540d\u8bbf\u95ee\u91cf",
+    adminMetricsDaily: "\u6bcf\u65e5\u6570\u636e",
+    adminMetricsDate: "\u65e5\u671f",
+    adminMetricsNoData: "\u6682\u65e0\u6bcf\u65e5\u6570\u636e\u3002",
+  errorsTitle: "\u5e38\u89c1\u9519\u8bef",
     error1: "\u540e\u7aef\u672a\u542f\u52a8\uff1a\u5148\u542f\u52a8 Nexra\uff0c\u5e76\u786e\u8ba4 {apiBase}/api/dashboard \u80fd\u8fd4\u56de\u6570\u636e\u3002",
     error2: "\u6280\u80fd\u4e0d\u5b58\u5728\uff1a\u4f60\u7684 agent \u8bf7\u6c42\u4e86\u65e0\u6548\u7684 skill id\u3002",
     error3: "\u53c2\u6570\u6821\u9a8c\u5931\u8d25\uff1a\u63d0\u4ea4\u8bc4\u4ef7\u65f6\u5fc5\u987b\u5e26 author\uff0crating \u5fc5\u987b\u5728 1 \u5230 5 \u4e4b\u95f4\u3002",
@@ -471,6 +489,9 @@ const state = {
   skillDetail: null,
   pendingSkills: [],
   adminSkills: [],
+  adminMetrics: null,
+  adminMetricsPage: 0,
+  adminTab: "METRICS",
   adminList: { items: [], page: 0, pageSize: 10, totalItems: 0, totalPages: 0, status: "PENDING", q: "" },
   adminDrafts: {
     PENDING: { q: "", pageSize: 10 },
@@ -480,7 +501,8 @@ const state = {
   billingSummary: null,
   transactions: [],
   apiKeys: [],
-  submitMode: "list"
+  submitMode: "list",
+  visitTracked: false
 };
 
 const heroTitle = document.querySelector("#hero-title");
@@ -580,6 +602,10 @@ function formatSystemRating(skill) {
 
 function currentAdminStatus() {
   return state.adminList?.status || "PENDING";
+}
+
+function currentAdminTab() {
+  return state.adminTab || "METRICS";
 }
 
 function syncAdminDraftState() {
@@ -696,12 +722,24 @@ async function api(path, options = {}) {
   return response.json();
 }
 
+async function trackVisit() {
+  if (state.visitTracked) {
+    return;
+  }
+  state.visitTracked = true;
+  api("/analytics/visit", { method: "POST", headers: authHeaders() }).catch((error) => {
+    console.warn(error);
+  });
+}
+
 function clearAuthState() {
   state.authToken = null;
   state.currentUser = null;
   state.userProfile = null;
   state.pendingSkills = [];
   state.adminSkills = [];
+  state.adminMetrics = null;
+  state.adminMetricsPage = 0;
   state.adminList = { items: [], page: 0, pageSize: 10, totalItems: 0, totalPages: 0, status: "PENDING", q: "" };
   state.adminSelectedSkillId = null;
   state.profileEditingSkillId = null;
@@ -809,13 +847,16 @@ function setView(view) {
     view = "marketplace";
   }
   state.selectedView = view;
+  const renderedView = (!hasLoadedPublicData() && ["welcome", "tutorial", "dashboard", "marketplace"].includes(view))
+    ? "loading"
+    : view;
   document.querySelectorAll(".view").forEach((section) => {
-    section.classList.toggle("active", section.id === `${view}-view`);
+    section.classList.toggle("active", section.id === `${renderedView}-view`);
   });
   document.querySelectorAll(".nav-link").forEach((button) => {
-    button.classList.toggle("active", button.dataset.view === view);
+    button.classList.toggle("active", button.dataset.view === view && renderedView !== "loading");
   });
-  heroTitle.textContent = tr().hero[view];
+  heroTitle.textContent = renderedView === "loading" ? tr().loadingTitle : tr().hero[view];
 }
 
 function updateLanguageUi() {
@@ -990,6 +1031,17 @@ ${state.agentGuide.exampleCall.payload}</pre>
     node.textContent = item;
     capabilities.appendChild(node);
   });
+}
+
+function renderLoading() {
+  const view = document.querySelector("#loading-view");
+  view.innerHTML = `
+    <article class="panel loading-panel">
+      <div class="loading-spinner" aria-hidden="true"></div>
+      <h3>${tr().loadingTitle}</h3>
+      <p class="helper-text">${tr().loadingCopy}</p>
+    </article>
+  `;
 }
 
 function renderTutorial() {
@@ -1778,10 +1830,20 @@ function renderAdmin() {
     return;
   }
 
+  const activeTab = currentAdminTab();
   const status = currentAdminStatus();
   const listTitle = status === "APPROVED" ? tr().adminApprovedTitle : status === "REJECTED" ? tr().adminRejectedTitle : tr().adminPendingTitle;
   const emptyCopy = status === "APPROVED" ? tr().adminApprovedEmpty : status === "REJECTED" ? tr().adminRejectedEmpty : tr().adminEmpty;
   const filteredSkills = Array.isArray(state.adminSkills) ? state.adminSkills : [];
+  const metrics = state.adminMetrics || {
+    totals: { registeredUsers: 0, visits: 0, anonymousVisits: 0 },
+    daily: [],
+    page: 0,
+    pageSize: 7,
+    totalItems: 0,
+    totalPages: 1
+  };
+  const dailyMetrics = Array.isArray(metrics.daily) ? metrics.daily : [];
   const selected = filteredSkills.find((skill) => skill.id === state.adminSelectedSkillId) ?? filteredSkills[0] ?? null;
   if (selected && !state.adminSelectedSkillId) {
     state.adminSelectedSkillId = selected.id;
@@ -1789,14 +1851,96 @@ function renderAdmin() {
 
   const wrapper = document.createElement("div");
   wrapper.className = "admin-grid";
+  if (activeTab === "METRICS") {
+    wrapper.innerHTML = `
+    <article class="panel" style="grid-column: 1 / -1;">
+      <div class="admin-actions" style="margin-bottom:14px;">
+        <button class="secondary-btn ${activeTab === "METRICS" ? "active" : ""}" type="button" data-admin-tab="METRICS">${tr().adminMetricsTitle}</button>
+        <button class="secondary-btn ${activeTab === "PENDING" ? "active" : ""}" type="button" data-admin-tab="PENDING">${tr().adminPendingTitle}</button>
+        <button class="secondary-btn ${activeTab === "APPROVED" ? "active" : ""}" type="button" data-admin-tab="APPROVED">${tr().adminApprovedTitle}</button>
+        <button class="secondary-btn ${activeTab === "REJECTED" ? "active" : ""}" type="button" data-admin-tab="REJECTED">${tr().adminRejectedTitle}</button>
+      </div>
+      <div class="section-title"><h3>${tr().adminMetricsTitle}</h3><span class="pill">${safeCount(metrics.totalItems || dailyMetrics.length || 0)}</span></div>
+      <div class="metrics-grid" style="margin-top:14px;">
+        <article class="metric-card">
+          <span>${tr().adminMetricsUsers}</span>
+          <strong>${safeCount(metrics.totals?.registeredUsers || 0)}</strong>
+        </article>
+        <article class="metric-card">
+          <span>${tr().adminMetricsVisits}</span>
+          <strong>${safeCount(metrics.totals?.visits || 0)}</strong>
+        </article>
+        <article class="metric-card">
+          <span>${tr().adminMetricsAnonymousVisits}</span>
+          <strong>${safeCount(metrics.totals?.anonymousVisits || 0)}</strong>
+        </article>
+      </div>
+      <div class="review-list" style="margin-top:18px;">
+        ${dailyMetrics.length
+          ? dailyMetrics.map((item) => `
+            <article class="review-card">
+              <div class="row-between">
+                <strong>${tr().adminMetricsDate}: ${item.date}</strong>
+                <span class="pill">${tr().adminMetricsVisits}: ${safeCount(item.visits || 0)}</span>
+              </div>
+              <p>${tr().adminMetricsUsers}: ${safeCount(item.registrations || 0)}</p>
+              <p>${tr().adminMetricsAnonymousVisits}: ${safeCount(item.anonymousVisits || 0)}</p>
+            </article>
+          `).join("")
+          : `<p class="helper-text">${tr().adminMetricsNoData}</p>`}
+      </div>
+      <div class="row-between" style="margin-top:16px;">
+        <span class="helper-text">${tr().marketplacePage} ${safeCount((metrics.page || 0) + 1)} / ${safeCount(metrics.totalPages || 1)}</span>
+        <div class="admin-actions" style="margin:0;">
+          <button id="admin-metrics-prev-btn" class="secondary-btn" type="button" ${(metrics.page || 0) <= 0 ? "disabled" : ""}>${tr().marketplacePrev}</button>
+          <button id="admin-metrics-next-btn" class="secondary-btn" type="button" ${(metrics.page || 0) >= ((metrics.totalPages || 1) - 1) ? "disabled" : ""}>${tr().marketplaceNext}</button>
+        </div>
+      </div>
+    </article>
+  `;
+    view.appendChild(wrapper);
+    wrapper.querySelectorAll("[data-admin-tab]").forEach((button) => {
+      button.addEventListener("click", async () => {
+        const nextTab = button.dataset.adminTab;
+        if (nextTab === currentAdminTab()) {
+          return;
+        }
+        state.adminTab = nextTab;
+        if (nextTab !== "METRICS") {
+          state.adminList.status = nextTab;
+          syncAdminDraftState();
+          state.adminList.page = 0;
+          state.adminSelectedSkillId = null;
+          await refreshUserData();
+          return;
+        }
+        renderAdmin();
+      });
+    });
+    const metricsPrevButton = wrapper.querySelector("#admin-metrics-prev-btn");
+    if (metricsPrevButton) {
+      metricsPrevButton.addEventListener("click", async () => {
+        state.adminMetricsPage = Math.max(0, state.adminMetricsPage - 1);
+        await refreshUserData();
+      });
+    }
+    const metricsNextButton = wrapper.querySelector("#admin-metrics-next-btn");
+    if (metricsNextButton) {
+      metricsNextButton.addEventListener("click", async () => {
+        state.adminMetricsPage += 1;
+        await refreshUserData();
+      });
+    }
+    return;
+  }
+
   wrapper.innerHTML = `
     <article class="panel">
-      <div class="filter-row" style="margin-bottom:14px;">
-        <div class="admin-actions">
-          <button class="secondary-btn ${status === "PENDING" ? "active" : ""}" type="button" data-admin-status="PENDING">${tr().adminPendingTitle}</button>
-          <button class="secondary-btn ${status === "APPROVED" ? "active" : ""}" type="button" data-admin-status="APPROVED">${tr().adminApprovedTitle}</button>
-          <button class="secondary-btn ${status === "REJECTED" ? "active" : ""}" type="button" data-admin-status="REJECTED">${tr().adminRejectedTitle}</button>
-        </div>
+      <div class="admin-actions" style="margin-bottom:14px;">
+        <button class="secondary-btn ${activeTab === "METRICS" ? "active" : ""}" type="button" data-admin-tab="METRICS">${tr().adminMetricsTitle}</button>
+        <button class="secondary-btn ${activeTab === "PENDING" ? "active" : ""}" type="button" data-admin-tab="PENDING">${tr().adminPendingTitle}</button>
+        <button class="secondary-btn ${activeTab === "APPROVED" ? "active" : ""}" type="button" data-admin-tab="APPROVED">${tr().adminApprovedTitle}</button>
+        <button class="secondary-btn ${activeTab === "REJECTED" ? "active" : ""}" type="button" data-admin-tab="REJECTED">${tr().adminRejectedTitle}</button>
       </div>
       <div class="section-title"><h3>${listTitle}</h3><span class="pill">${safeCount(state.adminList.totalItems || filteredSkills.length)}</span></div>
       <div class="toolbar-row" style="margin:12px 0 14px;">
@@ -1849,14 +1993,22 @@ function renderAdmin() {
     });
   }
 
-  wrapper.querySelectorAll("[data-admin-status]").forEach((button) => {
+  wrapper.querySelectorAll("[data-admin-tab]").forEach((button) => {
     button.addEventListener("click", async () => {
-      const nextStatus = button.dataset.adminStatus;
+      const nextTab = button.dataset.adminTab;
+      if (nextTab === currentAdminTab()) {
+        return;
+      }
       state.adminDrafts[currentAdminStatus()] = {
         q: state.adminList.q,
         pageSize: state.adminList.pageSize
       };
-      state.adminList.status = nextStatus;
+      state.adminTab = nextTab;
+      if (nextTab === "METRICS") {
+        renderAdmin();
+        return;
+      }
+      state.adminList.status = nextTab;
       syncAdminDraftState();
       state.adminList.page = 0;
       state.adminSelectedSkillId = null;
@@ -2092,6 +2244,7 @@ function rerenderViews() {
   renderNavigation();
   renderSessionControls();
   renderLoginModal();
+  renderLoading();
   renderWelcome();
   renderTutorial();
   renderDashboard();
@@ -2144,6 +2297,8 @@ async function refreshUserData() {
     state.userProfile = null;
     state.pendingSkills = [];
     state.adminSkills = [];
+    state.adminMetrics = null;
+    state.adminMetricsPage = 0;
     rerenderViews();
     return;
   }
@@ -2170,7 +2325,17 @@ async function refreshUserData() {
         throw error;
       })
     : Promise.resolve({ items: [], page: 0, pageSize: state.adminList.pageSize, totalItems: 0, totalPages: 0, status: state.adminList.status, q: state.adminList.q }));
+  const adminMetrics = await (isAdmin()
+    ? api(`/admin/metrics?days=7&page=${state.adminMetricsPage}`, { headers: authHeaders() }).catch((error) => {
+        if (error.status === 401 || error.status === 403) {
+          return { totals: { registeredUsers: 0, visits: 0, anonymousVisits: 0 }, daily: [], days: 7, page: 0, pageSize: 7, totalItems: 0, totalPages: 1 };
+        }
+        throw error;
+      })
+    : Promise.resolve({ totals: { registeredUsers: 0, visits: 0, anonymousVisits: 0 }, daily: [], days: 7, page: 0, pageSize: 7, totalItems: 0, totalPages: 1 }));
   state.adminSkills = adminSkills.items || [];
+  state.adminMetrics = adminMetrics;
+  state.adminMetricsPage = adminMetrics.page ?? state.adminMetricsPage;
   state.pendingSkills = state.adminSkills.filter((skill) => skill.approvalStatus === "PENDING");
   state.adminList.page = adminSkills.page ?? state.adminList.page;
   state.adminList.pageSize = adminSkills.pageSize ?? state.adminList.pageSize;
@@ -2306,6 +2471,7 @@ async function init() {
   rerenderViews();
   try {
     clearBanner();
+    trackVisit();
     await refreshData(false);
     if (currentUser()) {
       setBanner(withApiBase(tr().connected), "success");

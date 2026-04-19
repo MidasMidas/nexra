@@ -18,7 +18,6 @@ Nexra 是一个面向 AI Skill 搜索、评分与推荐的在线平台。
 - 按相关度、信任度、热度和成本效率排序推荐
 - 展示 provider 文档、鉴权要求和调用示例
 - 支持用户提交 skill 和评分评论
-- 支持管理员审核和批准 skill
 
 当前阶段的 Nexra 不是 skill 代理执行层。Agent 在 Nexra 找到 skill 后，需要自己去调用对应 provider。
 
@@ -39,16 +38,6 @@ Nexra 是一个面向 AI Skill 搜索、评分与推荐的在线平台。
 - `POST /api/skills/submissions`
 - `GET /api/users/me`
 
-管理员接口：
-
-- `GET /api/admin/skills?status=PENDING|APPROVED|REJECTED&q=&page=&pageSize=`
-- `POST /api/admin/skills/{id}/approve`
-- `POST /api/admin/skills/{id}/reject`
-- `PUT /api/admin/skills/{id}`
-- `DELETE /api/admin/skills/{id}`
-- `GET /api/admin/skills/sync/status`
-- `POST /api/admin/skills/sync`
-
 ## Agent 典型使用流程
 
 1. 先在 Nexra 搜索 skill。
@@ -61,6 +50,7 @@ Nexra 是一个面向 AI Skill 搜索、评分与推荐的在线平台。
 
 - [平台使用文档](./docs/usage-guide.md)
 - [产品设计文档](./docs/product-spec.md)
+- [Vercel 前端 + Python 常驻后端 + Supabase Postgres 部署说明](./docs/vercel-frontend-supabase-backend.md)
 
 ## 参与贡献
 

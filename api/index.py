@@ -12,19 +12,25 @@ if str(BACKEND_ROOT) not in sys.path:
 
 from app.common.logging_config import configure_logging
 from app.http.handler import create_handler
+from app.services.lite_service import LiteNexraService
 from app.services.nexra_service import NexraService
 
 configure_logging()
 _full_service = None
 _auth_service = None
+_dashboard_service = None
 
 
 def resolve_service(method: str, path: str):
-    global _full_service, _auth_service
+    global _full_service, _auth_service, _dashboard_service
     if path.startswith("/api/auth/"):
         if _auth_service is None:
-            _auth_service = NexraService(load_catalog=False)
+            _auth_service = LiteNexraService(mode="auth")
         return _auth_service
+    if method == "GET" and path == "/api/dashboard":
+        if _dashboard_service is None:
+            _dashboard_service = LiteNexraService(mode="dashboard")
+        return _dashboard_service
     if _full_service is None:
         _full_service = NexraService(load_catalog=True)
     return _full_service
