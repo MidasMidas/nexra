@@ -49,8 +49,7 @@ Nexra 是一个面向 AI Skill 搜索、评分与推荐的在线平台。
 ## 文档
 
 - [平台使用文档](./docs/usage-guide.md)
-- [产品设计文档](./docs/product-spec.md)
-- [Vercel 前端 + Python 常驻后端 + Supabase Postgres 部署说明](./docs/vercel-frontend-supabase-backend.md)
+- [在线 API 快速参考](./docs/vercel-frontend-supabase-backend.md)
 
 ## 参与贡献
 

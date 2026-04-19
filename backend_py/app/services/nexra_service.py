@@ -681,6 +681,8 @@ class NexraService:
 
     def _invalidate_dashboard_cache(self):
         self._dashboard_cache = None
+        if hasattr(self.state_store, "invalidate_public_dashboard_cache"):
+            self.state_store.invalidate_public_dashboard_cache()
 
     def _persist_auth_session(self, token, user_id, created_at):
         if self._auth_state_supported() and hasattr(self.state_store, "upsert_auth_session"):

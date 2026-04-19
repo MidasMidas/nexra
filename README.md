@@ -49,8 +49,7 @@ Public and user flows:
 ## Docs
 
 - [Hosted usage guide](./docs/usage-guide.md)
-- [Product spec](./docs/product-spec.md)
-- [Vercel frontend + Python backend + Supabase Postgres](./docs/vercel-frontend-supabase-backend.md)
+- [Hosted API quick reference](./docs/vercel-frontend-supabase-backend.md)
 
 ## Contributing
 

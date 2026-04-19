@@ -2,6 +2,7 @@
 import logging
 import math
 import os
+import time
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
@@ -16,6 +17,7 @@ class FileStateStore:
     def __init__(self, state_path: Path):
         self.state_path = state_path
         self.auth_state_path = state_path.with_name(f"{state_path.stem}-auth.json")
+        self.cache_state_path = state_path.with_name(f"{state_path.stem}-cache.json")
 
     def _load_json_file(self, path: Path):
         if not path.exists() or path.stat().st_size == 0:
@@ -101,10 +103,40 @@ class FileStateStore:
     def describe(self):
         return f"file:{self.state_path}"
 
+    def _load_cache_state(self):
+        return self._load_json_file(self.cache_state_path) or {}
+
+    def _save_cache_state(self, payload):
+        self._save_json_file(self.cache_state_path, payload)
+
+    def get_cached_public_dashboard(self, max_age_seconds):
+        payload = self._load_cache_state().get("public_dashboard")
+        if not payload:
+            return None
+        updated_at = float(payload.get("updated_at", 0) or 0)
+        if time.time() - updated_at > max(1, int(max_age_seconds or 0)):
+            return None
+        return payload.get("data")
+
+    def set_cached_public_dashboard(self, payload):
+        cache_state = self._load_cache_state()
+        cache_state["public_dashboard"] = {
+            "updated_at": time.time(),
+            "data": payload,
+        }
+        self._save_cache_state(cache_state)
+
+    def invalidate_public_dashboard_cache(self):
+        cache_state = self._load_cache_state()
+        if "public_dashboard" in cache_state:
+            del cache_state["public_dashboard"]
+            self._save_cache_state(cache_state)
+
 
 class MemoryStateStore:
     def __init__(self):
         self.snapshot = None
+        self.cache_state = {}
 
     def load_snapshot(self):
         return self.snapshot
@@ -114,6 +146,24 @@ class MemoryStateStore:
 
     def describe(self):
         return "memory"
+
+    def get_cached_public_dashboard(self, max_age_seconds):
+        payload = self.cache_state.get("public_dashboard")
+        if not payload:
+            return None
+        updated_at = float(payload.get("updated_at", 0) or 0)
+        if time.time() - updated_at > max(1, int(max_age_seconds or 0)):
+            return None
+        return payload.get("data")
+
+    def set_cached_public_dashboard(self, payload):
+        self.cache_state["public_dashboard"] = {
+            "updated_at": time.time(),
+            "data": payload,
+        }
+
+    def invalidate_public_dashboard_cache(self):
+        self.cache_state.pop("public_dashboard", None)
 
 
 class PostgresStateStore:
@@ -328,6 +378,15 @@ class PostgresStateStore:
                     registered_users INTEGER NOT NULL DEFAULT 0,
                     visits INTEGER NOT NULL DEFAULT 0,
                     anonymous_visits INTEGER NOT NULL DEFAULT 0,
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                )
+                """
+            )
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS nexra_runtime_cache (
+                    cache_key TEXT PRIMARY KEY,
+                    payload JSONB NOT NULL,
                     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
                 )
                 """
@@ -1385,6 +1444,49 @@ class PostgresStateStore:
             "totalItems": total_items,
             "totalPages": total_pages,
         }
+
+    def get_cached_public_dashboard(self, max_age_seconds):
+        with self._connect() as conn:
+            self._ensure_business_schema(conn)
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT payload
+                    FROM nexra_runtime_cache
+                    WHERE cache_key = 'public_dashboard'
+                      AND updated_at >= NOW() - (%s * INTERVAL '1 second')
+                    LIMIT 1
+                    """,
+                    (max(1, int(max_age_seconds or 0)),),
+                )
+                row = cursor.fetchone()
+        return row[0] if row else None
+
+    def set_cached_public_dashboard(self, payload):
+        with self._connect() as conn:
+            self._ensure_business_schema(conn)
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    """
+                    INSERT INTO nexra_runtime_cache (cache_key, payload, updated_at)
+                    VALUES ('public_dashboard', %s, NOW())
+                    ON CONFLICT (cache_key)
+                    DO UPDATE SET
+                        payload = EXCLUDED.payload,
+                        updated_at = NOW()
+                    """,
+                    (json.dumps(payload, ensure_ascii=False),),
+                )
+            conn.commit()
+
+    def invalidate_public_dashboard_cache(self):
+        with self._connect() as conn:
+            self._ensure_business_schema(conn)
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    "DELETE FROM nexra_runtime_cache WHERE cache_key = 'public_dashboard'"
+                )
+            conn.commit()
 
     def get_public_dashboard(self):
         with self._connect() as conn:

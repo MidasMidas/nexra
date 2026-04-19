@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import random
+import threading
 import uuid
 from datetime import datetime, timedelta
 
@@ -26,6 +27,7 @@ class LiteNexraService:
         self.email_service = EmailService()
         self._dashboard_cache = None
         self._dashboard_cache_ttl_seconds = 30
+        self._dashboard_shared_cache_ttl_seconds = 300
 
     def _load_config(self):
         config_path = resolve_config_path()
@@ -76,11 +78,31 @@ class LiteNexraService:
         now_ts = datetime.utcnow().timestamp()
         if self._dashboard_cache and (now_ts - self._dashboard_cache["timestamp"]) < self._dashboard_cache_ttl_seconds:
             return self._dashboard_cache["payload"]
+        if hasattr(self.state_store, "get_cached_public_dashboard"):
+            cached_payload = self.state_store.get_cached_public_dashboard(self._dashboard_shared_cache_ttl_seconds)
+            if cached_payload:
+                self._dashboard_cache = {"timestamp": now_ts, "payload": cached_payload}
+                return cached_payload
         if hasattr(self.state_store, "get_public_dashboard"):
             payload = self.state_store.get_public_dashboard()
+            if hasattr(self.state_store, "set_cached_public_dashboard"):
+                self.state_store.set_cached_public_dashboard(payload)
             self._dashboard_cache = {"timestamp": now_ts, "payload": payload}
             return payload
         raise ApiError(503, "Dashboard is warming up. Please retry in a moment.")
+
+    def _deliver_verification_email_async(self, email, code, language):
+        def runner():
+            try:
+                self.email_service.send_verification_code(email, code, language)
+                log.info("Verification email queued successfully. email=%s", email)
+            except Exception:
+                log.exception("Async verification email delivery failed. email=%s", email)
+                if hasattr(self.state_store, "delete_email_verification"):
+                    self.state_store.delete_email_verification(email)
+
+        thread = threading.Thread(target=runner, name="nexra-email-dispatch", daemon=True)
+        thread.start()
 
     def request_register_code(self, payload):
         email = safe_text(payload.get("email")).strip().lower()
@@ -104,13 +126,8 @@ class LiteNexraService:
             "created_at": now_iso(),
         }
         self.state_store.upsert_email_verification(verification)
-        try:
-            self.email_service.send_verification_code(email, code, language)
-        except Exception as exc:
-            self.state_store.delete_email_verification(email)
-            log.exception("Registration verification email delivery failed. email=%s", email)
-            raise ApiError(502, f"Verification email delivery failed: {exc}") from exc
-        return {"message": "Verification code sent."}
+        self._deliver_verification_email_async(email, code, language)
+        return {"message": "Verification code is being sent."}
 
     def login(self, payload):
         email = safe_text(payload.get("email")).strip().lower()

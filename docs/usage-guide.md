@@ -1,8 +1,10 @@
-﻿# Nexra 使用文档
+# Nexra 使用文档
+
+本文档只说明如何使用 Nexra 在线平台，不包含下载、本地部署或云端部署步骤。
 
 ## 1. 平台定位
 
-Nexra 是一个面向 AI Agent 的 skill 搜索、评分与推荐平台。当前版本重点提供 skill 发现、质量评分、推荐排序和治理能力，不做路由转发，也不替 Agent 直接调用第三方 skill。
+Nexra 是一个面向 AI Agent 的 skill 搜索、评分与推荐平台。当前版本重点提供 skill 发现、质量评分、推荐排序和调用说明，不做路由转发，也不替 Agent 直接调用第三方 skill。
 
 ## 2. 在线入口
 
@@ -59,7 +61,7 @@ GET /api/skills?q=search&page=0&pageSize=10
 GET /api/skills?function=report&page=0&pageSize=5
 ```
 
-返回结果包含：
+返回结果通常包含：
 
 - `userRatingAvg`
 - `systemScore`
@@ -70,7 +72,6 @@ GET /api/skills?function=report&page=0&pageSize=5
 - `invocationMethod`
 - `apiDocsUrl`
 - `authRequirement`
-- `approvalStatus`
 
 ## 6. Skill 详情
 
@@ -92,7 +93,7 @@ GET /api/skills?function=report&page=0&pageSize=5
 1. 先搜索 skill。
 2. 查看评分、推荐理由和调用说明。
 3. 选择 skill。
-4. 让 Agent 自己调用 skill provider。
+4. 让 Agent 自己调用对应 skill provider。
 5. 完成后再回 Nexra 打分和评论。
 
 ## 7. 用户提交与评分
@@ -119,19 +120,13 @@ GET /api/skills?function=report&page=0&pageSize=5
 
 ## 9. 邮箱验证码说明
 
-当前平台使用 Resend 发送注册验证码。
+当前平台使用邮箱验证码完成注册确认。
 
-如果你看到验证码邮件没有发到注册邮箱，而是只发到了 Resend 账户自己的邮箱，这通常不是 Nexra 把收件人写错了，而是 Resend 账号仍处于测试模式。
+如果你没有收到验证码邮件：
 
-测试模式下：
-
-- 只能投递到 Resend 账户自己的邮箱
-- 不能投递到任意注册邮箱
-
-要让验证码真正发到用户注册邮箱，需要：
-
-- 在 Resend 验证你自己的域名
-- 把发件地址改成该域名下的邮箱，例如 `Nexra <no-reply@yourdomain.com>`
+1. 先检查垃圾邮箱。
+2. 再重新发送验证码。
+3. 如果仍然没有收到，再联系平台管理员检查邮件服务状态。
 
 ## 10. 公开接口总览
 
